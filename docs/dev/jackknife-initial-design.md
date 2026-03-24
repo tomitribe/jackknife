@@ -1,4 +1,4 @@
-# Jar CLI Tool — Working Document
+# Jackknife — Initial Design
 
 ## Goal
 A Maven plugin (and potentially CLI) that Claude can invoke during coding sessions to list, decompile, and instrument classes in Java jars. The tool combines Vineflower (decompilation), Snitch (bytecode instrumentation), and Archie (jar repackaging) behind Maven plugin goals. It should be globally approved so Claude can use it without prompting.
@@ -81,11 +81,11 @@ A Maven plugin (and potentially CLI) that Claude can invoke during coding sessio
 | 20 | Method-name-only instrumentation targets all matching methods across classes | "Instrument `retryRequest` everywhere" — useful for interfaces with multiple implementations. Plugin uses index to resolve all matches. Can narrow with `-Dimplements=` or `-Dpackage=`. | Require exact FQN class+method always (tedious for cross-cutting concerns) |
 | 21 | Instrument goal executes without confirmation, prints clear summary of what it matched | No interactive confirmation — just do it, show what was done. Claude reads the output, cleans up from modified/ if too broad. Faster flow, no blocking prompts. | Confirm before writing (slows down the workflow, adds interactivity) |
 | 22 | Two instrumentation modes: `debug` (entry args + exit return/exception) and `timing` (elapsed time only) | No decision paralysis. Debug = everything for behavior analysis. Timing = lightweight for perf work, value logging would skew measurements. | Separate args/return/all modes (unnecessary granularity), tracking mode (least useful of Snitch's original modes) |
-| 25 | Snitch enhanced to delegate to java.lang.reflect.InvocationHandler | Snitch becomes just the bytecode wrapping engine (rename + delegate). All behavior (timing, arg logging, threshold, file output, value modification) lives in plain Java handler code. No ASM changes needed per feature. Same pattern as EJB interceptors / CDI InvocationContext. | Hardcoded mode-specific bytecode generation in Snitch (new ASM work for every feature), separate Snitch modes for each behavior (inflexible) |
-| 26 | Two artifacts: plugin (heavy, plugin-classloader-isolated) and runtime jar (small, shaded like Churchkey) | Plugin has Vineflower/ASM/Archie/Snitch — isolated by Maven's plugin classloader. Runtime jar has handler impls + tomitribe-util shaded — added to project classpath by plugin. Clean separation of build-time vs run-time concerns. | Single artifact (classloader conflicts), pure JDK runtime (too constraining for real formatting/IO code) |
-| 27 | Runtime config via classpath properties file (`META-INF/jackknife.properties`) | Plugin writes captures dir, threshold, mode into properties file in runtime jar or patched jar. Handler reads on first invocation, caches. No constructor args, no system properties, no static init. | System properties (must remember to set), constructor injection (bytecode complexity), hardcoded paths (inflexible) |
-| 23 | Large captured values written to file, referenced in console output | Method returns a 50KB HTML doc — dumping to stdout buries everything. Write to `target/jackknife/captures/ClassName-method-NNN.txt`, console shows file reference. Claude reads the file directly for test assertions — eliminates System.out/println/parse cycles. | Always inline (buries output), always to file (loses convenience for small values) |
-| 24 | Threshold-based: inline if short, file if over N chars (sensible default, configurable) | Short values stay readable in console. Long values get filed. Default threshold (e.g., 500-1000 chars) means we probably never configure it. | Fixed behavior either way (either too noisy or too indirect) |
+| 23 | Snitch enhanced to delegate to java.lang.reflect.InvocationHandler | Snitch becomes just the bytecode wrapping engine (rename + delegate). All behavior (timing, arg logging, threshold, file output, value modification) lives in plain Java handler code. No ASM changes needed per feature. Same pattern as EJB interceptors / CDI InvocationContext. | Hardcoded mode-specific bytecode generation in Snitch (new ASM work for every feature), separate Snitch modes for each behavior (inflexible) |
+| 24 | Two artifacts: plugin (heavy, plugin-classloader-isolated) and runtime jar (small, shaded like Churchkey) | Plugin has Vineflower/ASM/Archie/Snitch — isolated by Maven's plugin classloader. Runtime jar has handler impls + tomitribe-util shaded — added to project classpath by plugin. Clean separation of build-time vs run-time concerns. | Single artifact (classloader conflicts), pure JDK runtime (too constraining for real formatting/IO code) |
+| 25 | Runtime config via classpath properties file (`META-INF/jackknife.properties`) | Plugin writes captures dir, threshold, mode into properties file in runtime jar or patched jar. Handler reads on first invocation, caches. No constructor args, no system properties, no static init. | System properties (must remember to set), constructor injection (bytecode complexity), hardcoded paths (inflexible) |
+| 26 | Large captured values written to file, referenced in console output | Method returns a 50KB HTML doc — dumping to stdout buries everything. Write to `target/jackknife/captures/ClassName-method-NNN.txt`, console shows file reference. Claude reads the file directly for test assertions — eliminates System.out/println/parse cycles. | Always inline (buries output), always to file (loses convenience for small values) |
+| 27 | Threshold-based: inline if total line length over threshold or value contains newlines | Short values stay readable in console. Long values get filed. Sensible default, configurable, probably never touched. | Fixed behavior either way (either too noisy or too indirect) |
 | 28 | Instrument project code too, not just dependencies | Same Snitch+InvocationHandler applied to `target/classes/` after compile. Better than print statements: no source modification, no dirty diffs, no forgotten debug prints, structured output with threshold. Simpler than jar case — no Archie, no Artifact.setFile(), `mvn clean` reverts. | Print statements (modify source, forget to remove, dirty diffs), debugger only (not always available or practical) |
 | 29 | Project code configs stay in instrument/ (not moved); dependency configs move to modified/ | Project instrumentation targets `target/classes/` which is ephemeral — config must persist for re-application each compile. Dependency instrumentation produces a persistent jar in modified/ — config moves as receipt. Plugin determines which by checking if the class belongs to the project or a dependency. One inbox, no extra directories. | Separate directory for project configs (unnecessary complexity), always move (breaks project re-application), never move (loses receipt for dependencies) |
 | 30 | Plugin declared in parent pom profile, auto-activated by `.jackknife/` directory existence | `<activation><file><exists>.jackknife</exists></file></activation>` — filesystem-as-state-machine again. Plugin has full capabilities (classpath, Artifact.setFile()) when active. `rm -rf .jackknife/` deactivates completely. Parent pom is set-and-forget. Combined with `<pluginGroups>` in settings.xml for `mvn jackknife:index` shorthand. | Per-project pom declaration (tedious), settings.xml only (can't bind to lifecycle), always-on in parent (unnecessary overhead when not used) |
@@ -100,19 +100,22 @@ A Maven plugin (and potentially CLI) that Claude can invoke during coding sessio
 - [x] Usage file regeneration strategy — always regenerate, with "do not edit — generated" header
 - [x] Index file format — flat text, greppable, FQN class names, modifiers, generics, declared + thrown exceptions
 - [x] Instrumentation config format — plugin writes Snitch properties files via `instrument` goal with forgiving method parser
-
-### Open
 - [x] Naming: project=jackknife, plugin=jackknife-maven-plugin, runtime=jackknife-runtime, dir=.jackknife/, groupId=org.tomitribe.jackknife
-- [ ] Maven plugin lifecycle phase for the automatic process+swap — `initialize`? `process-resources`?
-- [ ] How does plugin find `.jackknife/` in multi-module projects — project root vs module root?
-- [ ] Should decompiled source be cached in `.jackknife/source/` so repeat lookups skip Maven?
-- [ ] If CLI extracted later: install story (brew), permission approval pattern
-- [ ] Dir proxy interface design for typed access to the `.jackknife/` structure
-- [ ] Handler registration mechanism — global registry keyed by class+method? Static field injection?
 - [x] Runtime jar — small, shaded (tomitribe-util relocated like Churchkey), real code for formatting/IO/threshold
 - [x] Plugin shading — plugin classloader isolates it; runtime jar shaded separately
-- [ ] Large value threshold — what default? Character count, or also trigger on newlines?
-- [ ] `target/jackknife/captures/` naming convention for captured large values
+- [x] Decompile caching — yes, cache in `.jackknife/source/` (decision 31). Same timestamp invalidation as index for SNAPSHOTs.
+
+### Deferred to implementation
+These are implementation details that will be resolved when writing the code, not design-level questions:
+- Maven plugin lifecycle phase for automatic process+swap — likely `process-classes` for project code, `initialize` for dependency swap
+- Multi-module `.jackknife/` location — walk up from module to find project root, or use `${session.executionRootDirectory}`
+- Dir proxy interface design — emerges from the code
+- Handler registration mechanism — likely global registry keyed by class+method
+- Large value threshold default — pick a sensible number (e.g., 500 chars or presence of newlines), tune from experience
+- `target/jackknife/captures/` naming convention — straightforward, e.g., `ClassName-method-NNN.txt`
+
+### Explicitly deferred
+- CLI extraction — build plugin-only first, extract CLI later if Maven startup overhead is a real problem (decision 3). If extracted: brew install, global PATH, `Bash(jackknife *)` permission.
 
 ## Rejected Alternatives
 | Alternative | Why Rejected |
