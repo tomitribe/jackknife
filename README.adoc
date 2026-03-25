@@ -1,12 +1,54 @@
 = Jackknife
 
-A Maven plugin for inspecting, decompiling, and instrumenting Java jar dependencies.
+A Maven plugin that lets https://claude.ai/claude-code[Claude Code] inspect, decompile, and instrument classes in your jar dependencies.
 
-Jackknife gives you a pocket knife for jars on your classpath — crack them open, read the code, and instrument methods for runtime observation. No source code required.
+* *No source jars required* — decompile any dependency on the classpath
+* *No System.out.println* — instrument methods for args, return values, timing
+* *No dirty diffs* — instrumentation is bytecode-level, source code untouched
+* *No forgotten debug code* — delete `.jackknife/` and everything reverts
 
-== Quick Start
+One `mvn` command bootstraps everything; after that, Claude reads files directly with zero Maven overhead.
 
-Add the plugin to your parent pom (or project pom) with a profile that activates when `.jackknife/` exists:
+== Commands
+
+[cols="1,3"]
+|===
+| `mvn jackknife:index` | Build lightweight manifests of all dependency jars (sub-second). Generates `.jackknife/USAGE.md` with full instructions for Claude.
+| `mvn jackknife:decompile -Dclass=...` | Decompile a class. First request decompiles the entire jar; subsequent reads are instant file access.
+| `mvn jackknife:instrument -Dmethod=... -Dmode=...` | Instrument methods for runtime observation (`debug` or `timing` mode).
+|===
+
+After `mvn jackknife:index`, Claude greps the manifests and reads decompiled source directly — no further Maven invocations needed for most lookups.
+
+== Setup
+
+Three steps, once per machine and once per parent pom.
+
+=== 1. CLAUDE.md
+
+Add to your global `~/.claude/CLAUDE.md`:
+
+----
+## Jackknife
+- When you need to inspect, decompile, or find classes in jar dependencies,
+  run `mvn jackknife:index` in the project. This generates `.jackknife/USAGE.md`
+  with full instructions. Read that file — it has everything you need.
+----
+
+=== 2. Maven settings
+
+Add the plugin group to `~/.m2/settings.xml` so you can use the shorthand `mvn jackknife:...`:
+
+[source,xml]
+----
+<pluginGroups>
+  <pluginGroup>org.tomitribe.jackknife</pluginGroup>
+</pluginGroups>
+----
+
+=== 3. Parent pom
+
+Add the jackknife profile to your parent pom. It auto-activates when a `.jackknife/` directory exists and does nothing otherwise:
 
 [source,xml]
 ----
@@ -20,7 +62,7 @@ Add the plugin to your parent pom (or project pom) with a profile that activates
       <plugin>
         <groupId>org.tomitribe.jackknife</groupId>
         <artifactId>jackknife-maven-plugin</artifactId>
-        <version>0.1-SNAPSHOT</version>
+        <version>0.2</version>
         <executions>
           <execution>
             <goals>
@@ -34,184 +76,69 @@ Add the plugin to your parent pom (or project pom) with a profile that activates
 </profile>
 ----
 
-Add the plugin group to `~/.m2/settings.xml` for shorthand invocation:
+Tomitribe projects: already included in `org.tomitribe:oss-parent:14+` and `com.tomitribe:tomitribe-parent:14+`.
 
-[source,xml]
-----
-<pluginGroups>
-  <pluginGroup>org.tomitribe.jackknife</pluginGroup>
-</pluginGroups>
-----
+=== 4. .gitignore
 
-== Usage
-
-=== 1. Index your dependencies
-
-[source,bash]
-----
-mvn jackknife:index
-----
-
-Scans all resolved dependencies, builds structural index files in `.jackknife/index/`, and generates `.jackknife/USAGE.md` with detailed usage instructions.
-
-Index files are flat, greppable text. After indexing, most lookups don't need Maven at all — just grep:
-
-[source,bash]
-----
-# Find a class
-grep -r 'DefaultRetryHandler' .jackknife/index/
-
-# Find implementations of an interface
-grep -r 'implements.*HttpRequestRetryHandler' .jackknife/index/
-
-# Find annotated classes
-grep -r '@jakarta.ejb.Stateless' .jackknife/index/
-
-# Find methods that throw a specific exception
-grep -r 'throws.*IllegalStateException' .jackknife/index/
-
-# Find resources
-grep -r 'META-INF/services' .jackknife/index/
-----
-
-=== 2. Decompile a class
-
-[source,bash]
-----
-mvn jackknife:decompile -Dclass=com.example.MyClass
-----
-
-Decompiles the class using https://github.com/Vineflower/vineflower[Vineflower] and prints the source to stdout. Results are cached in `.jackknife/source/` for repeat access.
-
-=== 3. Instrument methods
-
-[source,bash]
-----
-# Instrument a specific method
-mvn jackknife:instrument -Dmethod="com.example.Foo.process(String, int)" -Dmode=debug
-
-# Instrument by method name across all classes
-mvn jackknife:instrument -Dmethod="retryRequest" -Dmode=timing
-
-# Narrow by interface implementation
-mvn jackknife:instrument -Dmethod="retryRequest" -Dimplements=HttpRequestRetryHandler
-
-# Narrow by package
-mvn jackknife:instrument -Dmethod="process" -Dpackage=com.example
-----
-
-The method parser is forgiving — paste from index output, use Snitch format, or just a method name.
-
-==== Modes
-
-`debug`:: Logs method entry (args), exit (return value), and thrown exceptions. Large values are written to `target/jackknife/captures/` with a file reference in the console.
-
-`timing`:: Logs elapsed time only. Lightweight — no value capture.
-
-=== 4. Build with instrumentation
-
-[source,bash]
-----
-mvn compile
-# or
-mvn test
-----
-
-The plugin automatically:
-
-1. Picks up instrumentation configs from `.jackknife/instrument/`
-2. Transforms matching classes using ASM bytecode modification (rename + InvocationHandler wrapper)
-3. Writes patched jars to `.jackknife/modified/`
-4. Swaps patched jars into the classpath via `Artifact.setFile()`
-
-No pom changes needed. The original jars in `~/.m2/` are never modified.
-
-=== 5. Revert
-
-[source,bash]
-----
-# Revert a single dependency
-rm .jackknife/modified/org.apache.httpcomponents/httpclient-4.5.13.jar*
-
-# Revert everything
-rm -rf .jackknife/modified/*
-
-# Fully remove Jackknife state
-rm -rf .jackknife/
-----
+Add `.jackknife/` to your `.gitignore`.
 
 == How It Works
 
-Jackknife renames instrumented methods (e.g., `process` becomes `jackknife$process`) and generates a wrapper method with the original name that delegates to a `java.lang.reflect.InvocationHandler`. The handler chain is composable:
+=== Manifest + Decompile (two-tier architecture)
+
+Jackknife uses two tiers, optimized for minimal overhead:
+
+1. **Manifests** (all jars, sub-second) — lightweight class name listings. Enough to find which jar has a class and search across the classpath.
+2. **Decompiled source** (per jar, on demand) — full https://github.com/Vineflower/vineflower[Vineflower] decompilation. Triggered on first request for any class in a jar. Every class in that jar is written as an individual `.java` file for direct read access.
+
+After the first decompile of a jar, Claude reads `.jackknife/source/<groupId>/<artifact>/<path>/MyClass.java` directly. No Maven, no startup overhead, no output noise.
+
+=== Instrumentation
+
+Jackknife renames instrumented methods (e.g., `process` becomes `jackknife$process`) and generates a wrapper that delegates to a `java.lang.reflect.InvocationHandler`. The handler chain is composable:
 
 ----
-TimingHandler → DebugHandler → ProceedHandler
+TimingHandler -> DebugHandler -> ProceedHandler
 ----
 
-- *TimingHandler* measures elapsed time
-- *DebugHandler* logs args, return values, and exceptions
-- *ProceedHandler* calls the renamed original method via reflection
+* *TimingHandler* measures elapsed time
+* *DebugHandler* logs args, return values, and exceptions
+* *ProceedHandler* calls the renamed original method via reflection
 
-Each handler wraps the next. Adding new capabilities is just writing a new `InvocationHandler` — no bytecode work.
+Each handler wraps the next. Adding new capabilities is just writing a new `InvocationHandler`.
 
-== Directory Structure
+Large captured values (over threshold or containing newlines) are written to `target/jackknife/captures/` with a file reference in the console output — Claude reads the file directly for test assertions.
+
+=== Filesystem as state machine
 
 ----
 .jackknife/
-├── index/                   Greppable index files (one per jar)
-│   └── <groupId>/
-│       └── <artifact>-<version>.jar.index
-├── source/                  Cached decompiled source
-├── instrument/              Instrumentation inbox (configs to process)
-│   └── <groupId>/
-│       └── <artifact>-<version>.jar.properties
-├── modified/                Patched jars + receipts
-│   └── <groupId>/
-│       ├── <artifact>-<version>.jar
-│       └── <artifact>-<version>.jar.properties
-└── USAGE.md                 Auto-generated usage reference
++-- manifest/              Class listings (all jars, sub-second)
+|   +-- <groupId>/
+|       +-- <artifact>.jar.manifest
++-- source/                Decompiled source (per jar, on demand)
+|   +-- <groupId>/
+|       +-- <artifact>-<version>/
+|           +-- com/example/MyClass.java
++-- instrument/            Instrumentation inbox
+|   +-- <groupId>/
+|       +-- <artifact>.jar.properties
++-- modified/              Patched jars + receipts
+|   +-- <groupId>/
+|       +-- <artifact>.jar
+|       +-- <artifact>.jar.properties
++-- USAGE.md               Auto-generated reference (do not edit)
 ----
 
-The filesystem is the state machine:
-
-- File in `instrument/` → needs processing
-- File in `modified/` → done, actively swapped in
-- File deleted → reverted
-
-== Index Format
-
-Each `.index` file is flat text, one class per block:
-
-----
-# com.example.MyClass
-public class com.example.MyClass extends com.example.AbstractBase
-implements java.io.Serializable
-@jakarta.inject.Named
-  private final field name : java.lang.String
-  public method process(java.lang.String input, int count) : boolean
-    declares java.io.IOException
-    throws java.lang.IllegalArgumentException
-  public static method getInstance() : com.example.MyClass
-
-# resources
-META-INF/services/com.example.SPI
-META-INF/beans.xml
-----
-
-Includes access modifiers, generics, parameter names (from debug info), declared exceptions (throws clause), and thrown exceptions (from method bodies).
-
-== Project Structure
-
-----
-jackknife/
-├── jackknife-maven-plugin    Plugin goals and bytecode transformation
-└── jackknife-runtime         InvocationHandler implementations (injected into project classpath)
-----
+* File in `instrument/` -> needs processing
+* File in `modified/` -> done, actively swapped in
+* File deleted -> reverted
+* `rm -rf .jackknife/` -> fully clean
 
 == Requirements
 
-- Java 17+
-- Maven 3.9+
+* Java 17+
+* Maven 3.9+
 
 == License
 
