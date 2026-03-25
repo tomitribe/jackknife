@@ -56,33 +56,71 @@ public class TimingHandlerTest {
     }
 
     @Test
-    public void logsTimingWithElapsedTime() throws Throwable {
+    public void outputIsJsonWithJacknifePrefix() throws Throwable {
         final TimingHandler handler = new TimingHandler(returning("ok"));
         handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
-        assertTrue("Should log TIMING", out.contains("TIMING"));
+        assertTrue("Should start with JACKKNIFE", out.startsWith("JACKKNIFE "));
+        assertTrue("Should be JSON", out.contains("\"event\":\"call\""));
     }
 
     @Test
-    public void formatsNanosecondsCorrectly() throws Throwable {
+    public void containsTimeField() throws Throwable {
+        final TimingHandler handler = new TimingHandler(returning("ok"));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
+
+        assertTrue("Should contain time", output().contains("\"time\":\""));
+    }
+
+    @Test
+    public void containsMethodInfo() throws Throwable {
         final TimingHandler handler = new TimingHandler(returning("ok"));
         handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
-        assertTrue("Should have time unit",
-                out.contains("ns") || out.contains("us") || out.contains("ms")
-                        || out.matches(".*\\d+\\.\\d+s.*"));
+        assertTrue("Should contain class", out.contains("\"class\":\"SampleTarget\""));
+        assertTrue("Should contain method", out.contains("\"method\":\"greet\""));
     }
 
     @Test
-    public void staticMethodNullProxy() throws Throwable {
+    public void noArgsOrReturnFields() throws Throwable {
+        final TimingHandler handler = new TimingHandler(returning("ok"));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
+
+        final String out = output();
+        assertTrue("Should NOT contain args", !out.contains("\"args\""));
+        assertTrue("Should NOT contain return", !out.contains("\"return\""));
+    }
+
+    @Test
+    public void statusReturnedOnSuccess() throws Throwable {
+        final TimingHandler handler = new TimingHandler(returning("ok"));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
+
+        assertTrue("Should have status returned", output().contains("\"status\":\"returned\""));
+    }
+
+    @Test
+    public void statusThrownOnException() throws Throwable {
+        final TimingHandler handler = new TimingHandler(throwing(new RuntimeException("boom")));
+        try {
+            handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
+            fail("Expected RuntimeException");
+        } catch (final RuntimeException e) {
+            assertEquals("boom", e.getMessage());
+        }
+
+        assertTrue("Should have status thrown", output().contains("\"status\":\"thrown\""));
+    }
+
+    @Test
+    public void staticMethodWorks() throws Throwable {
         final Method staticMethod = SampleTarget.class.getDeclaredMethod("jackknife$multiply", long.class, long.class);
         final TimingHandler handler = new TimingHandler(returning(42L));
         handler.invoke(null, staticMethod, new Object[]{6L, 7L});
 
-        final String out = output();
-        assertTrue("Should log TIMING without NPE", out.contains("TIMING"));
+        assertTrue("Should work without NPE", output().contains("\"method\":\"multiply\""));
     }
 
     @Test
@@ -94,28 +132,11 @@ public class TimingHandlerTest {
     }
 
     @Test
-    public void exceptionInDelegateStillLogsTiming() throws Throwable {
-        final TimingHandler handler = new TimingHandler(throwing(new RuntimeException("boom")));
-        try {
-            handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
-            fail("Expected RuntimeException");
-        } catch (final RuntimeException e) {
-            assertEquals("boom", e.getMessage());
-        }
-
-        final String out = output();
-        assertTrue("Should still log TIMING after exception", out.contains("TIMING"));
-    }
-
-    @Test
-    public void labelShowsClassAndMethodName() throws Throwable {
+    public void oneLinePerCall() throws Throwable {
         final TimingHandler handler = new TimingHandler(returning("ok"));
         handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
-        final String out = output();
-        assertTrue("Should show class name", out.contains("SampleTarget"));
-        assertTrue("Should show method name without prefix", out.contains("greet"));
-        assertTrue("Should NOT show jackknife$ prefix", !out.contains("jackknife$"));
+        assertEquals("Should produce exactly one line", 1, output().lines().count());
     }
 
     private static InvocationHandler returning(final Object value) {

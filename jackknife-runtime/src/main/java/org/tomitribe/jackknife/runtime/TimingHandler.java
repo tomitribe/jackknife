@@ -20,11 +20,8 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 
 /**
- * InvocationHandler that measures elapsed time for method execution.
- * Delegates to the next handler in the chain.
- *
- * Lightweight — no value capture, no boxing overhead beyond what
- * the InvocationHandler pattern already introduces.
+ * Lightweight timing-only handler. Logs one JSON line per call
+ * with class, method, time, and status. No args or return values.
  */
 public final class TimingHandler implements InvocationHandler {
 
@@ -36,27 +33,23 @@ public final class TimingHandler implements InvocationHandler {
 
     @Override
     public Object invoke(final Object proxy, final Method method, final Object[] args) throws Throwable {
-        final String methodName = DebugHandler.methodLabel(method);
+        final String className = method != null ? method.getDeclaringClass().getSimpleName() : "unknown";
+        final String methodName = method != null ? method.getName().replace("jackknife$", "") : "unknown";
 
         final long start = System.nanoTime();
+        String status = "returned";
         try {
             return delegate.invoke(proxy, method, args);
+        } catch (final Throwable t) {
+            status = "thrown";
+            throw t;
         } finally {
             final long elapsed = System.nanoTime() - start;
-            System.out.println("TIMING " + methodName + " " + formatNanos(elapsed));
+            final String time = DebugHandler.formatNanos(elapsed);
+            System.out.println("JACKKNIFE {\"event\":\"call\",\"time\":\"" + time
+                    + "\",\"class\":\"" + className
+                    + "\",\"method\":\"" + methodName
+                    + "\",\"status\":\"" + status + "\"}");
         }
-    }
-
-    private static String formatNanos(final long nanos) {
-        if (nanos < 1_000) {
-            return nanos + "ns";
-        }
-        if (nanos < 1_000_000) {
-            return String.format("%.1fus", nanos / 1_000.0);
-        }
-        if (nanos < 1_000_000_000) {
-            return String.format("%.1fms", nanos / 1_000_000.0);
-        }
-        return String.format("%.2fs", nanos / 1_000_000_000.0);
     }
 }

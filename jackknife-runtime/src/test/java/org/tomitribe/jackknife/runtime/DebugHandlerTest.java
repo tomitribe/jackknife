@@ -24,7 +24,6 @@ import org.junit.rules.TemporaryFolder;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -42,7 +41,6 @@ public class DebugHandlerTest {
     private final ByteArrayOutputStream captured = new ByteArrayOutputStream();
     private PrintStream originalOut;
 
-    /** A sample renamed method — simulates what HandlerEnhancer produces */
     private final Method sampleMethod;
 
     public DebugHandlerTest() throws NoSuchMethodException {
@@ -69,60 +67,94 @@ public class DebugHandlerTest {
         return new DebugHandler(delegate, 500, tmp.getRoot());
     }
 
-    // ---- ENTER/EXIT logging ----
+    // ---- JSON output format ----
 
     @Test
-    public void logsEnterWithArgsForInstanceMethod() throws Throwable {
+    public void outputStartsWithJackknife() throws Throwable {
+        final DebugHandler handler = debugHandler(returning("result"));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"hello"});
+
+        assertTrue("Should start with JACKKNIFE prefix", output().startsWith("JACKKNIFE "));
+    }
+
+    @Test
+    public void outputContainsEventCall() throws Throwable {
+        final DebugHandler handler = debugHandler(returning("result"));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"hello"});
+
+        assertTrue("Should contain event:call", output().contains("\"event\":\"call\""));
+    }
+
+    @Test
+    public void outputContainsTime() throws Throwable {
+        final DebugHandler handler = debugHandler(returning("result"));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"hello"});
+
+        assertTrue("Should contain time field", output().contains("\"time\":\""));
+    }
+
+    @Test
+    public void outputContainsClassName() throws Throwable {
+        final DebugHandler handler = debugHandler(returning("result"));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"hello"});
+
+        assertTrue("Should contain class name", output().contains("\"class\":\"SampleTarget\""));
+    }
+
+    @Test
+    public void outputContainsMethodNameWithoutPrefix() throws Throwable {
         final DebugHandler handler = debugHandler(returning("result"));
         handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"hello"});
 
         final String out = output();
-        assertTrue("Should log ENTER", out.contains("ENTER"));
-        assertTrue("Should contain args", out.contains("hello"));
+        assertTrue("Should contain method name", out.contains("\"method\":\"greet\""));
+        assertTrue("Should NOT contain jackknife$ prefix", !out.contains("jackknife$"));
     }
 
     @Test
-    public void logsEnterWithArgsForStaticMethod() throws Throwable {
-        final Method staticMethod = SampleTarget.class.getDeclaredMethod("jackknife$multiply", long.class, long.class);
-        final DebugHandler handler = debugHandler(returning(42L));
-        handler.invoke(null, staticMethod, new Object[]{6L, 7L});
+    public void argsFormattedAsJsonArray() throws Throwable {
+        final DebugHandler handler = debugHandler(returning("result"));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"hello"});
 
-        final String out = output();
-        assertTrue("Should log ENTER without NPE", out.contains("ENTER"));
-        assertTrue("Should log EXIT", out.contains("EXIT"));
+        assertTrue("Should contain args as JSON array", output().contains("\"args\":[\"hello\"]"));
     }
 
     @Test
-    public void logsExitWithReturnValue() throws Throwable {
+    public void returnValueInJson() throws Throwable {
         final DebugHandler handler = debugHandler(returning("the-result"));
         handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
-        final String out = output();
-        assertTrue("Should log EXIT with return value", out.contains("EXIT"));
-        assertTrue("Should contain return value", out.contains("the-result"));
+        assertTrue("Should contain return value", output().contains("\"return\":\"the-result\""));
     }
 
     @Test
-    public void logsExitWithNullReturnValue() throws Throwable {
+    public void nullReturnValue() throws Throwable {
         final DebugHandler handler = debugHandler(returning(null));
         handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
-        final String out = output();
-        assertTrue("Should log EXIT", out.contains("EXIT"));
-        assertTrue("Should contain null", out.contains("null"));
+        assertTrue("Should contain null return", output().contains("\"return\":null"));
     }
 
     @Test
-    public void logsExitWithPrimitiveReturnValue() throws Throwable {
+    public void numericReturnValueBare() throws Throwable {
         final DebugHandler handler = debugHandler(returning(42));
         handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
-        final String out = output();
-        assertTrue("Should contain boxed primitive", out.contains("42"));
+        assertTrue("Should contain bare numeric", output().contains("\"return\":42"));
     }
 
     @Test
-    public void logsThrowWithExceptionClassAndMessage() throws Throwable {
+    public void booleanReturnValueBare() throws Throwable {
+        final DebugHandler handler = debugHandler(returning(true));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
+
+        assertTrue("Should contain bare boolean", output().contains("\"return\":true"));
+    }
+
+    // ---- Exception output ----
+
+    @Test
+    public void exceptionInJson() throws Throwable {
         final DebugHandler handler = debugHandler(throwing(new IllegalArgumentException("bad input")));
         try {
             handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
@@ -132,9 +164,8 @@ public class DebugHandlerTest {
         }
 
         final String out = output();
-        assertTrue("Should log THROW", out.contains("THROW"));
-        assertTrue("Should contain exception class", out.contains("IllegalArgumentException"));
-        assertTrue("Should contain message", out.contains("bad input"));
+        assertTrue("Should contain exception type", out.contains("\"type\":\"java.lang.IllegalArgumentException\""));
+        assertTrue("Should contain exception message", out.contains("\"message\":\"bad input\""));
     }
 
     @Test
@@ -149,45 +180,43 @@ public class DebugHandlerTest {
         }
     }
 
-    @Test
-    public void delegatesToNextHandler() throws Throwable {
-        final InvocationHandler delegate = (final Object p, final Method m, final Object[] a) -> "delegated";
-        final DebugHandler handler = debugHandler(delegate);
-        final Object result = handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
-        assertEquals("delegated", result);
-    }
-
-    // ---- Label formatting ----
+    // ---- Static method ----
 
     @Test
-    public void labelShowsClassAndMethodName() throws Throwable {
-        final DebugHandler handler = debugHandler(returning("ok"));
-        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
+    public void staticMethodWorks() throws Throwable {
+        final Method staticMethod = SampleTarget.class.getDeclaredMethod("jackknife$multiply", long.class, long.class);
+        final DebugHandler handler = debugHandler(returning(42L));
+        handler.invoke(null, staticMethod, new Object[]{6L, 7L});
 
         final String out = output();
-        assertTrue("Should show class name", out.contains("SampleTarget"));
-        assertTrue("Should show method name without prefix", out.contains("greet"));
-        assertTrue("Should NOT show jackknife$ prefix", !out.contains("jackknife$"));
+        assertTrue("Should contain JACKKNIFE prefix", out.startsWith("JACKKNIFE "));
+        assertTrue("Should contain method name", out.contains("\"method\":\"multiply\""));
     }
 
-    // ---- Array formatting ----
+    // ---- JSON value formatting ----
+
+    @Test
+    public void nullArgFormattedAsNull() throws Throwable {
+        final DebugHandler handler = debugHandler(returning("ok"));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{null});
+
+        assertTrue("Should format null arg as JSON null", output().contains("[null]"));
+    }
+
+    @Test
+    public void noArgsFormattedAsEmptyArray() throws Throwable {
+        final DebugHandler handler = debugHandler(returning("ok"));
+        handler.invoke(new SampleTarget(), sampleMethod, null);
+
+        assertTrue("Should format empty args as []", output().contains("\"args\":[]"));
+    }
 
     @Test
     public void objectArrayFormatted() throws Throwable {
         final DebugHandler handler = debugHandler(returning("ok"));
         handler.invoke(new SampleTarget(), sampleMethod, new Object[]{new Object[]{"a", "b"}});
 
-        final String out = output();
-        assertTrue("Should format Object[] with deepToString", out.contains("[a, b]"));
-    }
-
-    @Test
-    public void intArrayFormatted() throws Throwable {
-        final DebugHandler handler = debugHandler(returning("ok"));
-        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{new int[]{1, 2, 3}});
-
-        final String out = output();
-        assertTrue("Should format int[]", out.contains("[1, 2, 3]"));
+        assertTrue("Should format Object[] as JSON array", output().contains("[\"a\",\"b\"]"));
     }
 
     @Test
@@ -195,26 +224,15 @@ public class DebugHandlerTest {
         final DebugHandler handler = debugHandler(returning("ok"));
         handler.invoke(new SampleTarget(), sampleMethod, new Object[]{new byte[]{1, 2, 3, 4, 5}});
 
-        final String out = output();
-        assertTrue("Should show byte array length", out.contains("byte[5]"));
+        assertTrue("Should show byte array length", output().contains("\"byte[5]\""));
     }
 
     @Test
-    public void nullArgFormattedAsNull() throws Throwable {
+    public void stringWithQuotesEscaped() throws Throwable {
         final DebugHandler handler = debugHandler(returning("ok"));
-        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{null});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"say \"hello\""});
 
-        final String out = output();
-        assertTrue("Should format null arg", out.contains("null"));
-    }
-
-    @Test
-    public void noArgsFormatted() throws Throwable {
-        final DebugHandler handler = debugHandler(returning("ok"));
-        handler.invoke(new SampleTarget(), sampleMethod, null);
-
-        final String out = output();
-        assertTrue("Should format empty args as ()", out.contains("()"));
+        assertTrue("Should escape quotes", output().contains("say \\\"hello\\\""));
     }
 
     // ---- Capture file behavior ----
@@ -225,9 +243,8 @@ public class DebugHandlerTest {
         handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
-        assertTrue("Short value should be inline", out.contains("short"));
-        final File[] captures = tmp.getRoot().listFiles((final File dir, final String name) -> name.startsWith("capture-"));
-        assertTrue("No capture file for short values", captures == null || captures.length == 0);
+        assertTrue("Should contain return value inline", out.contains("\"return\":\"short\""));
+        assertTrue("Should NOT have file reference", !out.contains("\"file\":"));
     }
 
     @Test
@@ -237,20 +254,12 @@ public class DebugHandlerTest {
         handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
-        assertTrue("Should reference capture file", out.contains("[file:"));
+        assertTrue("Should have file reference", out.contains("\"file\":\""));
+        assertTrue("Should have status", out.contains("\"status\":\"returned\""));
     }
 
     @Test
-    public void shortValueWithNewlinesGoesToFile() throws Throwable {
-        final DebugHandler handler = new DebugHandler(returning("line1\nline2"), 500, tmp.getRoot());
-        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
-
-        final String out = output();
-        assertTrue("Newline value should go to file", out.contains("[file:"));
-    }
-
-    @Test
-    public void captureFileContentMatchesFullValue() throws Throwable {
+    public void captureFileContainsFullJson() throws Throwable {
         final String longValue = "x".repeat(200);
         final DebugHandler handler = new DebugHandler(returning(longValue), 100, tmp.getRoot());
         handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
@@ -258,18 +267,8 @@ public class DebugHandlerTest {
         final File[] captures = tmp.getRoot().listFiles((final File dir, final String name) -> name.startsWith("capture-"));
         assertTrue("Should have capture file", captures != null && captures.length > 0);
         final String content = Files.readString(captures[0].toPath());
-        assertEquals("Capture file should contain full value", longValue, content);
-    }
-
-    @Test
-    public void captureFileReferenceIsParseable() throws Throwable {
-        final String longValue = "x".repeat(200);
-        final DebugHandler handler = new DebugHandler(returning(longValue), 100, tmp.getRoot());
-        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
-
-        final String out = output();
-        assertTrue("Should have [file: prefix", out.contains("[file: "));
-        assertTrue("Should have .txt suffix in reference", out.contains(".txt]"));
+        assertTrue("Capture file should contain full JSON event", content.contains("\"event\":\"call\""));
+        assertTrue("Capture file should contain return value", content.contains(longValue));
     }
 
     @Test
@@ -292,13 +291,37 @@ public class DebugHandlerTest {
     }
 
     @Test
-    public void largeArgsGoToFile() throws Throwable {
-        final String bigArg = "a".repeat(600);
-        final DebugHandler handler = new DebugHandler(returning("ok"), 100, tmp.getRoot());
-        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{bigArg});
+    public void exceptionCaptureShowsExceptionType() throws Throwable {
+        final DebugHandler handler = new DebugHandler(throwing(new RuntimeException("boom")), 100, tmp.getRoot());
+        try {
+            handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
+            fail("Expected exception");
+        } catch (final RuntimeException e) {
+            // expected
+        }
 
         final String out = output();
-        assertTrue("Large args should trigger capture", out.contains("[file:"));
+        // May be inline or captured, either way should have exception info
+        assertTrue("Should mention exception", out.contains("RuntimeException") || out.contains("\"status\":\"thrown\""));
+    }
+
+    @Test
+    public void oneLinePerCall() throws Throwable {
+        final DebugHandler handler = debugHandler(returning("ok"));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
+
+        final long lineCount = output().lines().count();
+        assertEquals("Should produce exactly one line per call", 1, lineCount);
+    }
+
+    // ---- Delegate ----
+
+    @Test
+    public void delegatesToNextHandler() throws Throwable {
+        final InvocationHandler delegate = (final Object p, final Method m, final Object[] a) -> "delegated";
+        final DebugHandler handler = debugHandler(delegate);
+        final Object result = handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
+        assertEquals("delegated", result);
     }
 
     // ---- Helpers ----

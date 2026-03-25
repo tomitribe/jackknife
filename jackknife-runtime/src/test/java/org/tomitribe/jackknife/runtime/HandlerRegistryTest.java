@@ -193,8 +193,8 @@ public class HandlerRegistryTest {
     public void autoDiscoverParsesDebugMode() {
         final InvocationHandler handler = HandlerRegistry.getHandler(
                 "org.tomitribe.jackknife.runtime.SampleTarget", "greet");
-        assertNotNull("Should find debug handler for greet", handler);
-        assertTrue("Debug mode wraps ProceedHandler in DebugHandler",
+        assertNotNull("Should find handler for greet", handler);
+        assertTrue("Debug mode should be DebugHandler(ProceedHandler)",
                 handler instanceof DebugHandler);
     }
 
@@ -212,8 +212,8 @@ public class HandlerRegistryTest {
         final InvocationHandler handler = HandlerRegistry.getHandler(
                 "org.tomitribe.jackknife.runtime.SampleTarget", "manyArgs");
         assertNotNull(handler);
-        assertTrue("All mode should be TimingHandler wrapping DebugHandler",
-                handler instanceof TimingHandler);
+        assertTrue("All mode should default to DebugHandler (includes timing)",
+                handler instanceof DebugHandler);
     }
 
     @Test
@@ -239,8 +239,9 @@ public class HandlerRegistryTest {
 
         assertEquals("Hello, World!", result);
         final String output = out.toString();
-        assertTrue("Should have ENTER from DebugHandler", output.contains("ENTER"));
-        assertTrue("Should have EXIT from DebugHandler", output.contains("EXIT"));
+        assertTrue("Should have JACKKNIFE JSON output", output.contains("JACKKNIFE"));
+        assertTrue("Should have call event", output.contains("\"event\":\"call\""));
+        assertTrue("Should have return value", output.contains("\"return\":\"Hello, World!\""));
     }
 
     @Test
@@ -259,7 +260,9 @@ public class HandlerRegistryTest {
 
         assertEquals(7, result);
         final String output = out.toString();
-        assertTrue("Should have TIMING from TimingHandler", output.contains("TIMING"));
+        assertTrue("Should have JACKKNIFE JSON output", output.contains("JACKKNIFE"));
+        assertTrue("Should have time field", output.contains("\"time\":\""));
+        assertTrue("Should have status returned", output.contains("\"status\":\"returned\""));
     }
 
     @Test

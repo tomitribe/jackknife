@@ -35,21 +35,24 @@ assert logContent.contains('Transforming') || logContent.contains('Swapped') :
     'ProcessMojo should transform or swap the instrumented jar'
 
 // -- JACKKNIFE registration should appear --
-assert logContent.contains('JACKKNIFE: Registered') :
-    'HandlerRegistry should log registration of handlers'
+assert logContent.contains('"event":"register"') :
+    'HandlerRegistry should log registration event'
 
-// -- Debug output should appear during test execution --
-// Join.join is called by App.process and directly by AppTest.
-// With debug instrumentation, ENTER and EXIT lines should appear.
-assert logContent.contains('ENTER') :
-    'Debug output should include ENTER for instrumented Join.join calls'
+// -- JSON call events should appear during test execution --
+assert logContent.contains('"event":"call"') :
+    'Debug output should include call events'
 
-assert logContent.contains('EXIT') :
-    'Debug output should include EXIT for instrumented Join.join calls'
-
-// -- The debug output should reference the Join class --
-assert logContent.contains('Join') :
+assert logContent.contains('"class":"Join"') :
     'Debug output should reference the Join class'
+
+assert logContent.contains('"method":"join"') :
+    'Debug output should reference the join method'
+
+assert logContent.contains('"return":') :
+    'Debug output should include return values'
+
+assert logContent.contains('"time":') :
+    'Debug output should include timing'
 
 // -- Modified jar should exist --
 def modifiedDir = new File(basedir, '.jackknife/modified')

@@ -136,8 +136,8 @@ public final class HandlerRegistry {
 
                 register(className, methodName, handler);
 
-                System.out.println("JACKKNIFE: Registered " + mode + " handler for "
-                        + className + "." + methodName);
+                System.out.println("JACKKNIFE {\"event\":\"register\",\"mode\":\"" + mode
+                        + "\",\"method\":\"" + className + "." + methodName + "\"}");
             }
         } catch (final IOException e) {
             System.err.println("JACKKNIFE: Failed to load config from " + url + ": " + e.getMessage());
@@ -149,10 +149,8 @@ public final class HandlerRegistry {
      */
     private static InvocationHandler buildChain(final String mode, final ProceedHandler proceed) {
         return switch (mode) {
-            case "debug" -> new DebugHandler(proceed);
             case "timing" -> new TimingHandler(proceed);
-            case "all" -> new TimingHandler(new DebugHandler(proceed));
-            default -> proceed;
+            default -> new DebugHandler(proceed);
         };
     }
 

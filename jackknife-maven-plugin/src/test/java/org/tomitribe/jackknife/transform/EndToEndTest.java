@@ -86,8 +86,8 @@ public class EndToEndTest {
 
         assertEquals("Hello, World!", result);
         final String out = output();
-        assertTrue("Should log ENTER", out.contains("ENTER"));
-        assertTrue("Should log EXIT", out.contains("EXIT"));
+        assertTrue("Should have call event", out.contains("\"event\":\"call\""));
+        assertTrue("Should have return field", out.contains("\"return\":"));
         assertTrue("Should contain arg", out.contains("World"));
         assertTrue("Should contain result", out.contains("Hello, World!"));
     }
@@ -103,7 +103,7 @@ public class EndToEndTest {
 
         assertEquals("Hello, World!", result);
         final String out = output();
-        assertTrue("Should log TIMING", out.contains("TIMING"));
+        assertTrue("Should have timing JSON", out.contains("\"time\":\""));
     }
 
     // ---- Static method end-to-end ----
@@ -122,8 +122,8 @@ public class EndToEndTest {
 
         assertEquals(42L, result);
         final String out = output();
-        assertTrue("Should log ENTER", out.contains("ENTER"));
-        assertTrue("Should log EXIT", out.contains("EXIT"));
+        assertTrue("Should have call event", out.contains("\"event\":\"call\""));
+        assertTrue("Should have return field", out.contains("\"return\":"));
     }
 
     @Ignore("Static method E2E requires production classloader arrangement — see debugModeStaticMethodWithoutTccl")
@@ -137,8 +137,8 @@ public class EndToEndTest {
 
         assertEquals(42L, result);
         final String out = output();
-        assertTrue("Should log ENTER", out.contains("ENTER"));
-        assertTrue("Should log EXIT", out.contains("EXIT"));
+        assertTrue("Should have call event", out.contains("\"event\":\"call\""));
+        assertTrue("Should have return field", out.contains("\"return\":"));
     }
 
     // ---- Void method end-to-end ----
@@ -153,8 +153,8 @@ public class EndToEndTest {
         method.invoke(instance);
 
         final String out = output();
-        assertTrue("Should log ENTER", out.contains("ENTER"));
-        assertTrue("Should log EXIT", out.contains("EXIT"));
+        assertTrue("Should have call event", out.contains("\"event\":\"call\""));
+        assertTrue("Should have return field", out.contains("\"return\":"));
     }
 
     // ---- Primitive return end-to-end ----
@@ -170,8 +170,8 @@ public class EndToEndTest {
 
         assertEquals(7, result);
         final String out = output();
-        assertTrue("Should log ENTER", out.contains("ENTER"));
-        assertTrue("Should log EXIT", out.contains("EXIT"));
+        assertTrue("Should have call event", out.contains("\"event\":\"call\""));
+        assertTrue("Should have return field", out.contains("\"return\":"));
     }
 
     // ---- Exception end-to-end ----
@@ -193,7 +193,7 @@ public class EndToEndTest {
         }
 
         final String out = output();
-        assertTrue("Should log THROW", out.contains("THROW"));
+        assertTrue("Should contain exception in JSON", out.contains("\"exception\""));
         assertTrue("Should contain exception class", out.contains("IllegalArgumentException"));
     }
 
@@ -215,9 +215,9 @@ public class EndToEndTest {
 
         assertEquals("Hello, World!", result);
         final String out = output();
-        assertTrue("Should log ENTER from DebugHandler", out.contains("ENTER"));
-        assertTrue("Should log EXIT from DebugHandler", out.contains("EXIT"));
-        assertTrue("Should log TIMING from TimingHandler", out.contains("TIMING"));
+        assertTrue("Should have call event", out.contains("\"event\":\"call\""));
+        assertTrue("Should have return value", out.contains("\"return\":\"Hello, World!\""));
+        assertTrue("Should have timing", out.contains("\"time\":\""));
     }
 
     // ---- No handler registered — fallback ----
@@ -233,9 +233,9 @@ public class EndToEndTest {
 
         assertEquals("Hello, World!", result);
         final String out = output();
-        // No debug/timing output since no handler registered
-        assertTrue("Should have no ENTER/EXIT/TIMING output",
-                !out.contains("ENTER") && !out.contains("TIMING"));
+        // No JACKKNIFE output since no handler registered
+        assertTrue("Should have no JACKKNIFE output",
+                !out.contains("JACKKNIFE"));
     }
 
     // ---- Large return value capture ----
@@ -254,7 +254,7 @@ public class EndToEndTest {
         method.invoke(instance, "World");
 
         final String out = output();
-        assertTrue("Should reference capture file for return value", out.contains("[file:"));
+        assertTrue("Should reference capture file", out.contains("\"file\":\""));
 
         final File[] captures = capturesDir.listFiles((final File dir, final String name) -> name.startsWith("capture-"));
         assertTrue("Should have capture files", captures != null && captures.length > 0);
@@ -282,8 +282,8 @@ public class EndToEndTest {
 
         final String out = output();
         // Should have ENTER/EXIT for each method
-        final long enterCount = out.lines().filter(l -> l.contains("ENTER")).count();
-        assertTrue("Should have 3 ENTER lines", enterCount >= 3);
+        final long callCount = out.lines().filter(l -> l.contains("\"event\":\"call\"")).count();
+        assertTrue("Should have 3 call events", callCount >= 3);
     }
 
     // ---- Overloaded methods ----
@@ -301,7 +301,7 @@ public class EndToEndTest {
         assertEquals("one:a", result);
 
         final String out = output();
-        assertTrue("Should log ENTER", out.contains("ENTER"));
+        assertTrue("Should have call event", out.contains("\"event\":\"call\""));
     }
 
     // ---- Helper methods ----
