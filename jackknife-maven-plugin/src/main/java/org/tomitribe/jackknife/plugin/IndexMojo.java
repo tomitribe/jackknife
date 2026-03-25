@@ -24,18 +24,26 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
-import org.tomitribe.jackknife.index.IndexWriter;
-import org.tomitribe.jackknife.scanner.JarScanner;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 /**
- * Scans all resolved dependencies and builds structural index files
- * in .jackknife/index/. Also generates USAGE.md.
+ * Builds lightweight manifests for all resolved dependencies — just class
+ * names and resource paths, no ASM scanning, no decompilation.
+ *
+ * Sub-second for an entire classpath. Enough to answer "which jar has
+ * this class?" and "what classes are in this jar?"
+ *
+ * Full decompilation happens on demand per-jar when a class is first
+ * requested via the decompile goal.
+ *
+ * Also generates USAGE.md.
  */
 @Mojo(name = "index", requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME, aggregator = true)
 public class IndexMojo extends AbstractMojo {
@@ -50,9 +58,9 @@ public class IndexMojo extends AbstractMojo {
     public void execute() throws MojoExecutionException, MojoFailureException {
         final File rootDir = new File(executionRootDirectory);
         final File jackknife = new File(rootDir, ".jackknife");
-        final File indexDir = new File(jackknife, "index");
+        final File manifestDir = new File(jackknife, "manifest");
 
-        indexDir.mkdirs();
+        manifestDir.mkdirs();
 
         final Set<Artifact> artifacts = project.getArtifacts();
         int indexed = 0;
@@ -66,38 +74,80 @@ public class IndexMojo extends AbstractMojo {
                 continue;
             }
 
+            // Skip the project's own output artifact (uber jar awareness)
+            if (artifact.getGroupId().equals(project.getGroupId())
+                    && artifact.getArtifactId().equals(project.getArtifactId())) {
+                skipped++;
+                continue;
+            }
+
             final String groupId = artifact.getGroupId();
             final String fileName = file.getName();
-            final String indexFileName = fileName + ".index";
 
-            final File groupDir = new File(indexDir, groupId);
-            final File indexFile = new File(groupDir, indexFileName);
+            final File groupDir = new File(manifestDir, groupId);
+            final File manifestFile = new File(groupDir, fileName + ".manifest");
 
-            // SNAPSHOT invalidation: re-index if jar is newer than index
-            if (indexFile.exists() && indexFile.lastModified() >= file.lastModified()) {
-                getLog().debug("Index up to date: " + indexFile.getName());
+            // SNAPSHOT invalidation: re-manifest if jar is newer
+            if (manifestFile.exists() && manifestFile.lastModified() >= file.lastModified()) {
                 skipped++;
                 continue;
             }
 
             try {
-                getLog().info("Indexing " + artifact.getGroupId() + ":" + artifact.getArtifactId() + ":" + artifact.getVersion());
-                final JarScanner.Result result = JarScanner.scan(file);
-                IndexWriter.write(result, indexFile);
+                writeManifest(file, manifestFile);
                 indexed++;
             } catch (final IOException e) {
-                getLog().warn("Failed to index " + file.getName() + ": " + e.getMessage());
+                getLog().warn("Failed to manifest " + file.getName() + ": " + e.getMessage());
                 skipped++;
             }
         }
 
-        getLog().info("Indexed " + indexed + " jars, skipped " + skipped + " (up to date or non-jar)");
+        getLog().info("Manifested " + indexed + " jars, skipped " + skipped + " (up to date or non-jar)");
 
-        // Generate USAGE.md
         try {
             writeUsage(jackknife);
         } catch (final IOException e) {
             throw new MojoExecutionException("Failed to write USAGE.md", e);
+        }
+    }
+
+    /**
+     * Write a lightweight manifest: one class name or resource path per line.
+     * Just reads the zip directory — no decompression, no ASM.
+     */
+    private void writeManifest(final File jarFile, final File manifestFile) throws IOException {
+        manifestFile.getParentFile().mkdirs();
+
+        try (final JarFile jar = new JarFile(jarFile);
+             final PrintWriter out = new PrintWriter(new FileWriter(manifestFile))) {
+
+            final var entries = jar.entries();
+            boolean hasResources = false;
+            final java.util.List<String> resources = new java.util.ArrayList<>();
+
+            while (entries.hasMoreElements()) {
+                final JarEntry entry = entries.nextElement();
+                if (entry.isDirectory()) {
+                    continue;
+                }
+
+                final String name = entry.getName();
+                if (name.endsWith(".class")) {
+                    if (name.endsWith("module-info.class") || name.endsWith("package-info.class")) {
+                        continue;
+                    }
+                    out.println(name.replace('/', '.').replace(".class", ""));
+                } else {
+                    resources.add(name);
+                }
+            }
+
+            if (!resources.isEmpty()) {
+                out.println("# resources");
+                for (final String resource : resources) {
+                    out.println(resource);
+                }
+            }
         }
     }
 
@@ -111,97 +161,63 @@ public class IndexMojo extends AbstractMojo {
             out.println();
             out.println("## Quick Start");
             out.println();
-            out.println("Index files have been generated in `.jackknife/index/`. Use Grep to search them directly — no Maven needed.");
+            out.println("Manifests have been generated in `.jackknife/manifest/` and list every class");
+            out.println("and resource in each dependency jar. Use Grep to search them directly.");
+            out.println();
+            out.println("Decompiled source is generated on demand per-jar in `.jackknife/source/`.");
+            out.println("Use the Read tool to access individual class files directly.");
             out.println();
             out.println("## Directory Structure");
             out.println();
             out.println("```");
             out.println(".jackknife/");
-            out.println("├── index/                   Index files (greppable, one per jar)");
+            out.println("├── manifest/                Lightweight class listings (all jars, sub-second)");
             out.println("│   └── <groupId>/");
-            out.println("│       └── <artifact>-<version>.jar.index");
-            out.println("├── source/                  Cached decompiled source");
+            out.println("│       └── <artifact>-<version>.jar.manifest");
+            out.println("├── source/                  Decompiled source (per-jar, on demand)");
             out.println("│   └── <groupId>/");
-            out.println("│       └── <ClassName>.java");
-            out.println("├── instrument/              Instrumentation inbox (write configs here)");
+            out.println("│       └── <artifact>-<version>/");
+            out.println("│           └── com/example/MyClass.java");
+            out.println("├── instrument/              Instrumentation inbox");
             out.println("│   └── <groupId>/");
             out.println("│       └── <artifact>-<version>.jar.properties");
-            out.println("├── modified/                Patched jars + moved configs (receipts)");
+            out.println("├── modified/                Patched jars + receipts");
             out.println("│   └── <groupId>/");
             out.println("│       ├── <artifact>-<version>.jar");
             out.println("│       └── <artifact>-<version>.jar.properties");
             out.println("└── USAGE.md                 This file (regenerated, do not edit)");
             out.println("```");
             out.println();
-            out.println("## Index File Format");
+            out.println("## Finding Classes");
             out.println();
-            out.println("Each `.index` file is flat text, one class per block, blank-line separated.");
-            out.println();
+            out.println("Manifests are one class name per line. Search with Grep:");
             out.println("```");
-            out.println("# com.example.MyClass");
-            out.println("public class com.example.MyClass extends com.example.AbstractBase");
-            out.println("implements java.io.Serializable");
-            out.println("@jakarta.inject.Named");
-            out.println("  private final field name : java.lang.String");
-            out.println("  public method process(java.lang.String input, int count) : boolean");
-            out.println("    declares java.io.IOException");
-            out.println("    throws java.lang.IllegalArgumentException");
-            out.println("  public static method getInstance() : com.example.MyClass");
+            out.println("grep -r 'CustomField' .jackknife/manifest/");
             out.println("```");
             out.println();
-            out.println("Resources are listed at the end under `# resources`.");
-            out.println();
-            out.println("## Common Grep Patterns");
-            out.println();
-            out.println("Find a class by name:");
+            out.println("Find resources:");
             out.println("```");
-            out.println("grep -r 'DefaultRetryHandler' .jackknife/index/");
+            out.println("grep -r 'META-INF/services' .jackknife/manifest/");
             out.println("```");
             out.println();
-            out.println("Find all implementations of an interface:");
+            out.println("## Reading Source");
+            out.println();
+            out.println("After running `mvn jackknife:decompile -Dclass=com.example.MyClass`,");
+            out.println("the entire jar is decompiled. Read any class directly:");
             out.println("```");
-            out.println("grep -r 'implements.*HttpRequestRetryHandler' .jackknife/index/");
+            out.println("Read .jackknife/source/<groupId>/<artifact>-<version>/com/example/MyClass.java");
             out.println("```");
             out.println();
-            out.println("Find all classes with an annotation:");
-            out.println("```");
-            out.println("grep -r '@jakarta.ejb.Stateless' .jackknife/index/");
-            out.println("```");
-            out.println();
-            out.println("Find methods that throw a specific exception:");
-            out.println("```");
-            out.println("grep -r 'throws.*IllegalStateException' .jackknife/index/");
-            out.println("```");
-            out.println();
-            out.println("Find a resource file:");
-            out.println("```");
-            out.println("grep -r 'META-INF/services' .jackknife/index/");
-            out.println("```");
-            out.println();
-            out.println("## Decompiling");
-            out.println();
-            out.println("To see the full source of a class:");
-            out.println("```");
-            out.println("mvn jackknife:decompile -Dclass=com.example.MyClass");
-            out.println("```");
-            out.println();
-            out.println("Decompiled source is cached in `.jackknife/source/` for repeat access.");
+            out.println("Subsequent lookups for classes in the same jar need no Maven invocation.");
             out.println();
             out.println("## Instrumenting");
             out.println();
-            out.println("To instrument a method for runtime observation:");
             out.println("```");
             out.println("mvn jackknife:instrument -Dmethod=\"com.example.Foo.process(String, int)\" -Dmode=debug");
             out.println("```");
             out.println();
-            out.println("Modes:");
-            out.println("- `debug` — logs method entry (args), exit (return value), and any thrown exceptions");
-            out.println("- `timing` — logs elapsed time only (lightweight, no value capture)");
-            out.println();
-            out.println("The method parser is forgiving — you can paste from index output or use shorthand.");
-            out.println("Method-name-only targets all matching methods across classes.");
-            out.println();
-            out.println("Instrumented jars are applied automatically on the next build.");
+            out.println("Modes: `debug` (args + return + exceptions), `timing` (elapsed time only).");
+            out.println("Instrumented jars applied automatically on next build.");
             out.println("Remove from `.jackknife/modified/` to revert.");
         }
 

@@ -28,11 +28,9 @@ import java.io.FileReader;
 import java.io.IOException;
 
 /**
- * Shows a class's structural information from the index — fields, methods,
- * annotations, hierarchy, exceptions — without decompiling.
- *
- * Faster than decompile, no Vineflower needed, and often sufficient
- * for understanding an API.
+ * Shows which jar contains a class and where the decompiled source is.
+ * If the jar has been decompiled, prints the source file path for
+ * direct Read tool access.
  *
  * Usage: mvn jackknife:describe -Dclass=com.example.MyClass
  */
@@ -48,73 +46,68 @@ public class DescribeMojo extends AbstractMojo {
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         final File rootDir = new File(executionRootDirectory);
-        final File indexDir = new File(rootDir, ".jackknife/index");
+        final File manifestDir = new File(rootDir, ".jackknife/manifest");
+        final File sourceDir = new File(rootDir, ".jackknife/source");
 
-        if (!indexDir.exists()) {
-            throw new MojoFailureException("Index not found. Run 'mvn jackknife:index' first.");
+        if (!manifestDir.exists()) {
+            throw new MojoFailureException("Manifests not found. Run 'mvn jackknife:index' first.");
         }
 
-        final String header = "# " + className;
-        boolean found = false;
-
-        final File[] groupDirs = indexDir.listFiles(File::isDirectory);
+        // Search manifests to find which jar has this class
+        final File[] groupDirs = manifestDir.listFiles(File::isDirectory);
         if (groupDirs == null) {
-            throw new MojoFailureException("No index files found.");
+            throw new MojoFailureException("No manifest files found.");
         }
 
+        boolean found = false;
         for (final File groupDir : groupDirs) {
-            final File[] indexFiles = groupDir.listFiles((final File dir, final String name) -> name.endsWith(".index"));
-            if (indexFiles == null) {
+            final File[] manifestFiles = groupDir.listFiles(
+                    (final File dir, final String name) -> name.endsWith(".manifest"));
+            if (manifestFiles == null) {
                 continue;
             }
 
-            for (final File indexFile : indexFiles) {
-                final String result = findClassInIndex(indexFile, header);
-                if (result != null) {
-                    final String artifactName = indexFile.getName().replace(".index", "");
-                    System.out.println("# " + className + "  [" + groupDir.getName() + ":" + artifactName + "]");
-                    System.out.println(result);
-                    found = true;
+            for (final File manifestFile : manifestFiles) {
+                if (!containsClass(manifestFile, className)) {
+                    continue;
+                }
+
+                found = true;
+                final String artifactName = manifestFile.getName().replace(".manifest", "");
+                final String jarDirName = artifactName.replace(".jar", "");
+                System.out.println("Found in: " + groupDir.getName() + ":" + artifactName);
+
+                // Check if source has been decompiled
+                final String classPath = className.replace('.', '/') + ".java";
+                final File sourceFile = new File(new File(sourceDir, groupDir.getName()), jarDirName + "/" + classPath);
+
+                if (sourceFile.exists()) {
+                    System.out.println("Source:   " + sourceFile.getPath());
+                } else {
+                    System.out.println("Source:   not yet decompiled");
+                    System.out.println("Run:      mvn jackknife:decompile -Dclass=" + className);
+                    System.out.println("Then read: " + sourceFile.getPath());
                 }
             }
         }
 
         if (!found) {
-            throw new MojoFailureException("Class not found in index: " + className
+            throw new MojoFailureException("Class not found in manifests: " + className
                     + ". Run 'mvn jackknife:index' to rebuild.");
         }
     }
 
-    /**
-     * Find a class block in an index file. Returns the block content
-     * (everything after the header until the next blank line or header),
-     * or null if not found.
-     */
-    private String findClassInIndex(final File indexFile, final String header) {
-        try (final BufferedReader reader = new BufferedReader(new FileReader(indexFile))) {
+    private boolean containsClass(final File manifestFile, final String className) {
+        try (final BufferedReader reader = new BufferedReader(new FileReader(manifestFile))) {
             String line;
-            boolean inBlock = false;
-            final StringBuilder block = new StringBuilder();
-
             while ((line = reader.readLine()) != null) {
-                if (inBlock) {
-                    // End of block: blank line or next class header
-                    if (line.isEmpty() || (line.startsWith("# ") && !line.equals(header))) {
-                        return block.toString();
-                    }
-                    block.append(line).append("\n");
-                } else if (line.equals(header)) {
-                    inBlock = true;
+                if (line.equals(className)) {
+                    return true;
                 }
             }
-
-            if (inBlock) {
-                return block.toString();
-            }
         } catch (final IOException e) {
-            getLog().debug("Failed to read index file: " + indexFile);
+            getLog().debug("Failed to read: " + manifestFile);
         }
-
-        return null;
+        return false;
     }
 }

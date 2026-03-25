@@ -33,11 +33,16 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.jar.Manifest;
 
 /**
- * Decompiles a specific class from the project's dependencies using Vineflower.
- * Prints to stdout and caches to .jackknife/source/.
+ * Decompiles a class from project dependencies using Vineflower.
+ *
+ * On first request for any class in a jar, decompiles the ENTIRE jar
+ * and writes one .java file per class to .jackknife/source/. All
+ * subsequent lookups for classes in that jar are direct file reads
+ * with no Maven invocation needed.
  *
  * Usage: mvn jackknife:decompile -Dclass=com.example.MyClass
  */
@@ -60,11 +65,9 @@ public class DecompileMojo extends AbstractMojo {
         final File jackknife = new File(rootDir, ".jackknife");
         final File sourceDir = new File(jackknife, "source");
 
-        final File cachedFile = new File(sourceDir, className.replace('.', '/') + ".java");
-
         // Find which jar contains this class
         File targetJar = null;
-        String artifactLabel = null;
+        Artifact targetArtifact = null;
         final Set<Artifact> artifacts = project.getArtifacts();
         for (final Artifact artifact : artifacts) {
             final File file = artifact.getFile();
@@ -75,8 +78,7 @@ public class DecompileMojo extends AbstractMojo {
             try (final java.util.jar.JarFile jar = new java.util.jar.JarFile(file)) {
                 if (jar.getEntry(classPath + ".class") != null) {
                     targetJar = file;
-                    artifactLabel = artifact.getGroupId() + ":" + artifact.getArtifactId() + ":" + artifact.getVersion();
-                    getLog().info("Found " + className + " in " + artifactLabel);
+                    targetArtifact = artifact;
                     break;
                 }
             } catch (final IOException e) {
@@ -88,28 +90,31 @@ public class DecompileMojo extends AbstractMojo {
             throw new MojoFailureException("Class not found in any dependency: " + className);
         }
 
-        // Use cache if it exists and is newer than the source jar
-        if (cachedFile.exists() && cachedFile.lastModified() >= targetJar.lastModified()) {
-            getLog().info("Using cached source: " + cachedFile.getPath());
-            printFile(cachedFile);
+        final String groupId = targetArtifact.getGroupId();
+        final String jarDirName = targetJar.getName().replace(".jar", "");
+        final File jarSourceDir = new File(new File(sourceDir, groupId), jarDirName);
+
+        // Check if this jar has already been decompiled
+        final File requestedFile = new File(jarSourceDir, classPath + ".java");
+        if (requestedFile.exists()) {
+            getLog().info("Source available: " + requestedFile.getPath());
+            printFile(requestedFile);
             return;
         }
 
-        // Decompile with Vineflower
-        // Use exact class path + ".java" for matching, not prefix
-        cachedFile.getParentFile().mkdirs();
-        final String expectedEntryName = classPath + ".java";
-        final CaptureResultSaver saver = new CaptureResultSaver(cachedFile, expectedEntryName);
+        // Decompile the entire jar
+        getLog().info("Decompiling " + targetArtifact.getGroupId() + ":" + targetArtifact.getArtifactId()
+                + ":" + targetArtifact.getVersion() + " (" + targetJar.getName() + ")");
+
+        jarSourceDir.mkdirs();
+        final AtomicInteger count = new AtomicInteger(0);
+        final PerClassSaver saver = new PerClassSaver(jarSourceDir, count);
 
         final Decompiler decompiler = Decompiler.builder()
                 .inputs(targetJar)
-                // Use exact class path for prefix (Vineflower will also decompile
-                // inner classes like CustomField$Inner, but our saver only captures
-                // the exact match)
-                .allowedPrefixes(classPath)
                 .output(saver)
                 .option(IFernflowerPreferences.LOG_LEVEL, "error")
-                .option(IFernflowerPreferences.THREADS, "1")
+                .option(IFernflowerPreferences.THREADS, String.valueOf(Runtime.getRuntime().availableProcessors()))
                 .option(IFernflowerPreferences.REMOVE_BRIDGE, true)
                 .option(IFernflowerPreferences.REMOVE_SYNTHETIC, true)
                 .option(IFernflowerPreferences.DECOMPILE_GENERIC_SIGNATURES, true)
@@ -123,12 +128,14 @@ public class DecompileMojo extends AbstractMojo {
 
         decompiler.decompile();
 
-        if (!saver.hasCaptured()) {
-            throw new MojoFailureException("Vineflower did not produce output for: " + className);
-        }
+        getLog().info("Decompiled " + count.get() + " classes to " + jarSourceDir.getPath());
 
-        // Print the cached file to stdout
-        printFile(cachedFile);
+        // Now print the requested class
+        if (requestedFile.exists()) {
+            printFile(requestedFile);
+        } else {
+            throw new MojoFailureException("Decompilation completed but " + className + " was not produced");
+        }
     }
 
     private void printFile(final File file) throws MojoExecutionException {
@@ -141,56 +148,45 @@ public class DecompileMojo extends AbstractMojo {
     }
 
     /**
-     * IResultSaver that captures decompiled output for a specific class,
-     * writes to a cache file, and ignores everything else.
-     *
-     * Uses exact entry name matching to avoid capturing similarly-named
-     * classes (e.g., CustomFieldDisplayType when CustomField was requested).
+     * IResultSaver that writes each decompiled class to its own .java file,
+     * using the class's internal path as the file path within the output directory.
      */
-    private static class CaptureResultSaver implements IResultSaver {
+    private static class PerClassSaver implements IResultSaver {
 
-        private final File outputFile;
-        private final String expectedEntryName;
-        private boolean captured;
+        private final File outputDir;
+        private final AtomicInteger count;
 
-        CaptureResultSaver(final File outputFile, final String expectedEntryName) {
-            this.outputFile = outputFile;
-            this.expectedEntryName = expectedEntryName;
-        }
-
-        boolean hasCaptured() {
-            return captured;
+        PerClassSaver(final File outputDir, final AtomicInteger count) {
+            this.outputDir = outputDir;
+            this.count = count;
         }
 
         @Override
         public void saveClassEntry(final String path, final String archiveName,
                                    final String qualifiedName, final String entryName,
                                    final String content) {
-            if (captured) {
-                return;
-            }
-            if (content != null && entryName != null && entryName.equals(expectedEntryName)) {
-                writeContent(content);
-            }
+            writeClass(entryName, content);
         }
 
         @Override
         public void saveClassFile(final String path, final String qualifiedName,
                                   final String entryName, final String content, final int[] mapping) {
-            if (captured) {
-                return;
-            }
-            if (content != null && entryName != null && entryName.equals(expectedEntryName)) {
-                writeContent(content);
-            }
+            writeClass(entryName, content);
         }
 
-        private void writeContent(final String content) {
+        private void writeClass(final String entryName, final String content) {
+            if (content == null || entryName == null) {
+                return;
+            }
+
+            final File outputFile = new File(outputDir, entryName);
+            outputFile.getParentFile().mkdirs();
+
             try (final PrintWriter out = new PrintWriter(new FileWriter(outputFile))) {
                 out.print(content);
-                captured = true;
+                count.incrementAndGet();
             } catch (final IOException e) {
-                throw new RuntimeException("Failed to write decompiled source to " + outputFile, e);
+                // Skip classes we can't write
             }
         }
 

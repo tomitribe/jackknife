@@ -26,9 +26,11 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Finds which jar(s) contain a class or pattern.
+ * Finds which jar(s) contain a class or pattern by searching manifests.
  *
  * Usage: mvn jackknife:find -Dclass=com.example.MyClass
  *        mvn jackknife:find -Dquery=CustomField
@@ -48,16 +50,16 @@ public class FindMojo extends AbstractMojo {
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         final File rootDir = new File(executionRootDirectory);
-        final File indexDir = new File(rootDir, ".jackknife/index");
+        final File manifestDir = new File(rootDir, ".jackknife/manifest");
 
-        if (!indexDir.exists()) {
-            throw new MojoFailureException("Index not found. Run 'mvn jackknife:index' first.");
+        if (!manifestDir.exists()) {
+            throw new MojoFailureException("Manifests not found. Run 'mvn jackknife:index' first.");
         }
 
         final String searchTerm;
         final boolean exactMatch;
         if (className != null && !className.isEmpty()) {
-            searchTerm = "# " + className;
+            searchTerm = className;
             exactMatch = true;
         } else if (query != null && !query.isEmpty()) {
             searchTerm = query;
@@ -67,20 +69,21 @@ public class FindMojo extends AbstractMojo {
         }
 
         boolean found = false;
-        final File[] groupDirs = indexDir.listFiles(File::isDirectory);
+        final File[] groupDirs = manifestDir.listFiles(File::isDirectory);
         if (groupDirs == null) {
-            throw new MojoFailureException("No index files found.");
+            throw new MojoFailureException("No manifest files found.");
         }
 
         for (final File groupDir : groupDirs) {
-            final File[] indexFiles = groupDir.listFiles((final File dir, final String name) -> name.endsWith(".index"));
-            if (indexFiles == null) {
+            final File[] manifestFiles = groupDir.listFiles(
+                    (final File dir, final String name) -> name.endsWith(".manifest"));
+            if (manifestFiles == null) {
                 continue;
             }
 
-            for (final File indexFile : indexFiles) {
-                final String artifactName = indexFile.getName().replace(".index", "");
-                final var matches = searchIndex(indexFile, searchTerm, exactMatch);
+            for (final File manifestFile : manifestFiles) {
+                final String artifactName = manifestFile.getName().replace(".manifest", "");
+                final List<String> matches = searchManifest(manifestFile, searchTerm, exactMatch);
 
                 if (!matches.isEmpty()) {
                     found = true;
@@ -98,25 +101,28 @@ public class FindMojo extends AbstractMojo {
         }
     }
 
-    private java.util.List<String> searchIndex(final File indexFile, final String searchTerm,
-                                               final boolean exactMatch) {
-        final java.util.List<String> matches = new java.util.ArrayList<>();
+    private List<String> searchManifest(final File manifestFile, final String searchTerm,
+                                        final boolean exactMatch) {
+        final List<String> matches = new ArrayList<>();
 
-        try (final BufferedReader reader = new BufferedReader(new FileReader(indexFile))) {
+        try (final BufferedReader reader = new BufferedReader(new FileReader(manifestFile))) {
             String line;
             while ((line = reader.readLine()) != null) {
+                if (line.startsWith("#")) {
+                    continue;
+                }
                 if (exactMatch) {
                     if (line.equals(searchTerm)) {
-                        matches.add(line.substring(2)); // strip "# "
+                        matches.add(line);
                     }
                 } else {
                     if (line.contains(searchTerm)) {
-                        matches.add(line.trim());
+                        matches.add(line);
                     }
                 }
             }
         } catch (final IOException e) {
-            getLog().debug("Failed to read: " + indexFile);
+            getLog().debug("Failed to read: " + manifestFile);
         }
 
         return matches;

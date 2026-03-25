@@ -55,7 +55,7 @@ public final class IndexWriter {
         }
     }
 
-    private static void writeClass(final PrintWriter out, final ClassStructure cls) {
+    public static void writeClass(final PrintWriter out, final ClassStructure cls) {
         // Class header
         out.println("# " + cls.getName());
 
