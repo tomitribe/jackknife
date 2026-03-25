@@ -16,20 +16,32 @@
  */
 package org.tomitribe.jackknife.runtime;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.InvocationHandler;
+import java.net.URL;
+import java.util.Enumeration;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Global registry for InvocationHandlers keyed by class+method+descriptor.
  *
  * The transformed bytecode calls getHandler() to look up the handler chain
- * for each instrumented method. If no handler is registered, returns null
- * and the wrapper falls back to a direct call to the original method.
+ * for each instrumented method. On first access, auto-discovers handler
+ * configs from META-INF/jackknife/handlers.properties on the classpath.
+ *
+ * If no handler is registered, returns null and the wrapper falls back
+ * to a direct call to the original method.
  */
 public final class HandlerRegistry {
 
     private static final ConcurrentMap<String, InvocationHandler> HANDLERS = new ConcurrentHashMap<>();
+    private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
+    private static final String CONFIG_PATH = "META-INF/jackknife/handlers.properties";
 
     private HandlerRegistry() {
     }
@@ -37,13 +49,12 @@ public final class HandlerRegistry {
     /**
      * Look up the handler for a specific method.
      * Called by generated wrapper bytecode.
-     *
-     * @param className the fully qualified class name (dotted)
-     * @param methodName the method name
-     * @param descriptor the method descriptor (ASM format)
-     * @return the registered InvocationHandler, or null if none
+     * Auto-initializes from classpath config on first call.
      */
     public static InvocationHandler getHandler(final String className, final String methodName, final String descriptor) {
+        if (INITIALIZED.compareAndSet(false, true)) {
+            autoDiscover();
+        }
         final String key = key(className, methodName, descriptor);
         return HANDLERS.get(key);
     }
@@ -66,10 +77,126 @@ public final class HandlerRegistry {
     }
 
     /**
-     * Remove all registered handlers.
+     * Remove all registered handlers and reset initialization state.
      */
     public static void clear() {
         HANDLERS.clear();
+        INITIALIZED.set(false);
+    }
+
+    /**
+     * Scan the classpath for META-INF/jackknife/handlers.properties files
+     * and register handlers for each entry.
+     *
+     * File format (one per line):
+     *   mode className methodName descriptor paramTypes
+     *
+     * Example:
+     *   debug com.example.Foo process (Ljava/lang/String;I)Z java.lang.String,int
+     *   timing com.example.Bar execute ()V
+     */
+    private static void autoDiscover() {
+        try {
+            final Enumeration<URL> configs = Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResources(CONFIG_PATH);
+
+            while (configs.hasMoreElements()) {
+                final URL url = configs.nextElement();
+                loadConfig(url);
+            }
+        } catch (final IOException e) {
+            System.err.println("JACKKNIFE: Failed to discover handler configs: " + e.getMessage());
+        }
+    }
+
+    private static void loadConfig(final URL url) {
+        try (final InputStream is = url.openStream();
+             final BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) {
+                    continue;
+                }
+
+                // Format: mode className methodName descriptor [paramTypes]
+                final String[] parts = line.split("\\s+", 5);
+                if (parts.length < 4) {
+                    continue;
+                }
+
+                final String mode = parts[0];
+                final String className = parts[1];
+                final String methodName = parts[2];
+                final String descriptor = parts[3];
+                final String paramTypesStr = parts.length > 4 ? parts[4] : "";
+
+                final Class<?>[] paramTypes = parseParamTypes(paramTypesStr);
+
+                final ProceedHandler proceed = new ProceedHandler(methodName, paramTypes);
+                final InvocationHandler handler = buildChain(mode, proceed);
+
+                register(className, methodName, descriptor, handler);
+
+                System.out.println("JACKKNIFE: Registered " + mode + " handler for "
+                        + className + "." + methodName);
+            }
+        } catch (final IOException e) {
+            System.err.println("JACKKNIFE: Failed to load config from " + url + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Build the handler chain for a given mode.
+     */
+    private static InvocationHandler buildChain(final String mode, final ProceedHandler proceed) {
+        return switch (mode) {
+            case "debug" -> new DebugHandler(proceed);
+            case "timing" -> new TimingHandler(proceed);
+            case "all" -> new TimingHandler(new DebugHandler(proceed));
+            default -> proceed;
+        };
+    }
+
+    /**
+     * Parse comma-separated parameter type names into Class objects.
+     */
+    private static Class<?>[] parseParamTypes(final String paramTypesStr) {
+        if (paramTypesStr == null || paramTypesStr.isEmpty()) {
+            return new Class<?>[0];
+        }
+
+        final String[] typeNames = paramTypesStr.split(",");
+        final Class<?>[] types = new Class<?>[typeNames.length];
+
+        for (int i = 0; i < typeNames.length; i++) {
+            types[i] = resolveType(typeNames[i].trim());
+        }
+
+        return types;
+    }
+
+    private static Class<?> resolveType(final String name) {
+        return switch (name) {
+            case "boolean" -> boolean.class;
+            case "byte" -> byte.class;
+            case "char" -> char.class;
+            case "short" -> short.class;
+            case "int" -> int.class;
+            case "long" -> long.class;
+            case "float" -> float.class;
+            case "double" -> double.class;
+            case "void" -> void.class;
+            default -> {
+                try {
+                    yield Class.forName(name);
+                } catch (final ClassNotFoundException e) {
+                    throw new IllegalStateException("Cannot resolve type: " + name, e);
+                }
+            }
+        };
     }
 
     private static String key(final String className, final String methodName, final String descriptor) {

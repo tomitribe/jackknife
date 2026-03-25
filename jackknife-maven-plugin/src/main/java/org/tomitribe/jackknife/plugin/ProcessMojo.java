@@ -25,12 +25,26 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
+import org.tomitribe.jackknife.transform.HandlerEnhancer;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.jar.JarOutputStream;
 
 /**
  * Automatic lifecycle participant that:
@@ -55,23 +69,20 @@ public class ProcessMojo extends AbstractMojo {
         final File jackknife = new File(rootDir, ".jackknife");
 
         if (!jackknife.exists()) {
-            return; // No .jackknife directory — nothing to do
+            return;
         }
 
         final File instrumentDir = new File(jackknife, "instrument");
         final File modifiedDir = new File(jackknife, "modified");
 
-        // Step 1: Process pending instrumentation requests
         processInstrumentations(instrumentDir, modifiedDir);
-
-        // Step 2: Swap modified jars into the classpath
         swapModifiedJars(modifiedDir);
     }
 
     /**
      * Process any pending instrumentation config files in .jackknife/instrument/.
-     * Applies Snitch bytecode transformation and writes patched jars to .jackknife/modified/.
-     * Moves the properties file from instrument/ to modified/ as a receipt.
+     * Applies HandlerEnhancer bytecode transformation and writes patched jars
+     * to .jackknife/modified/. Moves the properties file as a receipt.
      */
     private void processInstrumentations(final File instrumentDir, final File modifiedDir) {
         if (!instrumentDir.exists() || !instrumentDir.isDirectory()) {
@@ -90,49 +101,105 @@ public class ProcessMojo extends AbstractMojo {
             }
 
             for (final File propsFile : propsFiles) {
-                final String groupId = groupDir.getName();
-                // Derive artifact filename: remove .properties suffix
-                final String artifactFileName = propsFile.getName().substring(
-                        0, propsFile.getName().length() - ".properties".length());
+                processOneArtifact(propsFile, groupDir.getName(), modifiedDir);
+            }
+        }
+    }
 
-                // Find the actual jar in the resolved dependencies
-                final File jarFile = findJarForArtifact(groupId, artifactFileName);
-                if (jarFile == null) {
-                    getLog().warn("Cannot find jar for " + groupId + ":" + artifactFileName + " — skipping instrumentation");
+    private void processOneArtifact(final File propsFile, final String groupId, final File modifiedDir) {
+        final String artifactFileName = propsFile.getName().substring(
+                0, propsFile.getName().length() - ".properties".length());
+
+        final File jarFile = findJarForArtifact(groupId, artifactFileName);
+        if (jarFile == null) {
+            getLog().warn("Cannot find jar for " + groupId + ":" + artifactFileName + " — skipping");
+            return;
+        }
+
+        final File modGroupDir = new File(modifiedDir, groupId);
+        modGroupDir.mkdirs();
+        final File patchedJar = new File(modGroupDir, artifactFileName);
+
+        if (patchedJar.exists()) {
+            getLog().debug("Patched jar already exists: " + patchedJar.getName());
+        } else {
+            // Parse the instrumentation config
+            final InstrumentConfig config = parseConfig(propsFile);
+            if (config.isEmpty()) {
+                getLog().warn("No instrumentation entries in " + propsFile.getName());
+                return;
+            }
+
+            try {
+                getLog().info("Transforming " + artifactFileName);
+                transformJar(jarFile, patchedJar, config);
+                getLog().info("  Wrote patched jar: " + patchedJar.getPath());
+            } catch (final IOException e) {
+                getLog().error("Failed to transform jar: " + e.getMessage());
+                return;
+            }
+        }
+
+        // Move the properties file to modified/ as a receipt
+        final File receipt = new File(modGroupDir, propsFile.getName());
+        try {
+            Files.move(propsFile.toPath(), receipt.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        } catch (final IOException e) {
+            getLog().warn("Failed to move properties file: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Transform a jar: apply HandlerEnhancer to matching classes,
+     * copy everything else, inject handler config.
+     */
+    private void transformJar(final File sourceJar, final File targetJar, final InstrumentConfig config)
+            throws IOException {
+
+        try (final JarFile jar = new JarFile(sourceJar);
+             final JarOutputStream out = new JarOutputStream(new FileOutputStream(targetJar))) {
+
+            final var entries = jar.entries();
+            while (entries.hasMoreElements()) {
+                final JarEntry entry = entries.nextElement();
+
+                if (entry.isDirectory()) {
+                    out.putNextEntry(new JarEntry(entry.getName()));
+                    out.closeEntry();
                     continue;
                 }
 
-                // Target location for the patched jar
-                final File modGroupDir = new File(modifiedDir, groupId);
-                modGroupDir.mkdirs();
-                final File patchedJar = new File(modGroupDir, artifactFileName);
+                try (final InputStream is = jar.getInputStream(entry)) {
+                    final byte[] bytes = is.readAllBytes();
 
-                if (patchedJar.exists()) {
-                    getLog().debug("Patched jar already exists: " + patchedJar.getName());
-                } else {
-                    // TODO: Apply Snitch + Archie bytecode transformation
-                    // For now, copy the original jar as a placeholder
-                    // The actual instrumentation will be added when Snitch is enhanced
-                    // with InvocationHandler delegation
-                    try {
-                        getLog().info("Processing instrumentation for " + artifactFileName);
-                        Files.copy(jarFile.toPath(), patchedJar.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                        getLog().warn("  (bytecode transformation not yet implemented — using original jar)");
-                    } catch (final IOException e) {
-                        getLog().error("Failed to create patched jar: " + e.getMessage());
-                        continue;
+                    if (entry.getName().endsWith(".class")) {
+                        final String className = entry.getName()
+                                .replace(".class", "")
+                                .replace('/', '.');
+
+                        final Set<String> methods = config.getMethodsForClass(className);
+                        if (methods != null && !methods.isEmpty()) {
+                            getLog().info("  Enhancing " + className + " methods: " + methods);
+                            final byte[] enhanced = HandlerEnhancer.enhance(bytes, methods);
+                            out.putNextEntry(new JarEntry(entry.getName()));
+                            out.write(enhanced);
+                            out.closeEntry();
+                            continue;
+                        }
                     }
-                }
 
-                // Move the properties file to modified/ as a receipt
-                final File receipt = new File(modGroupDir, propsFile.getName());
-                try {
-                    Files.move(propsFile.toPath(), receipt.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                    getLog().info("Moved " + propsFile.getName() + " to modified/");
-                } catch (final IOException e) {
-                    getLog().warn("Failed to move properties file: " + e.getMessage());
+                    // Copy unchanged
+                    out.putNextEntry(new JarEntry(entry.getName()));
+                    out.write(bytes);
+                    out.closeEntry();
                 }
             }
+
+            // Inject handler config for runtime auto-discovery
+            final String handlerConfig = config.toHandlerConfig();
+            out.putNextEntry(new JarEntry("META-INF/jackknife/handlers.properties"));
+            out.write(handlerConfig.getBytes(StandardCharsets.UTF_8));
+            out.closeEntry();
         }
     }
 
@@ -161,7 +228,6 @@ public class ProcessMojo extends AbstractMojo {
             for (final File patchedJar : jarFiles) {
                 final String groupId = groupDir.getName();
 
-                // Find the matching artifact and swap its file
                 for (final Artifact artifact : artifacts) {
                     if (!artifact.getGroupId().equals(groupId)) {
                         continue;
@@ -184,9 +250,6 @@ public class ProcessMojo extends AbstractMojo {
         }
     }
 
-    /**
-     * Find the jar file for a given groupId and artifact filename in the resolved dependencies.
-     */
     private File findJarForArtifact(final String groupId, final String artifactFileName) {
         for (final Artifact artifact : project.getArtifacts()) {
             if (!artifact.getGroupId().equals(groupId)) {
@@ -198,5 +261,148 @@ public class ProcessMojo extends AbstractMojo {
             }
         }
         return null;
+    }
+
+    /**
+     * Parse an instrumentation properties file.
+     *
+     * Format (one per line):
+     *   @com.example.Foo.process(java.lang.String,int) = com.example.Foo.process(java.lang.String,int)
+     *   com.example.Bar.execute() = com.example.Bar.execute()
+     *
+     * @ prefix = debug mode, no prefix = timing mode
+     */
+    private InstrumentConfig parseConfig(final File propsFile) {
+        final InstrumentConfig config = new InstrumentConfig();
+
+        try (final BufferedReader reader = new BufferedReader(new FileReader(propsFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) {
+                    continue;
+                }
+
+                // Parse: [@]class.method(args) = class.method(args)
+                final String key = line.contains("=") ? line.substring(0, line.indexOf('=')).trim() : line;
+
+                final boolean isDebug = key.startsWith("@");
+                final String methodSpec = isDebug ? key.substring(1) : key;
+                final String mode = isDebug ? "debug" : "timing";
+
+                // Extract class name and method name from FQN method spec
+                final int parenStart = methodSpec.indexOf('(');
+                final String fullName = parenStart >= 0 ? methodSpec.substring(0, parenStart) : methodSpec;
+                final int lastDot = fullName.lastIndexOf('.');
+                if (lastDot < 0) {
+                    continue;
+                }
+
+                final String className = fullName.substring(0, lastDot);
+                final String methodName = fullName.substring(lastDot + 1);
+
+                // Parse parameter types from the descriptor
+                final String argsStr = parenStart >= 0 && methodSpec.contains(")")
+                        ? methodSpec.substring(parenStart + 1, methodSpec.lastIndexOf(')'))
+                        : "";
+
+                // Build ASM descriptor from Java type names
+                final String descriptor = buildDescriptor(argsStr);
+
+                config.add(className, methodName, mode, descriptor, argsStr);
+            }
+        } catch (final IOException e) {
+            // skip
+        }
+
+        return config;
+    }
+
+    /**
+     * Build an ASM method descriptor from comma-separated Java type names.
+     * Approximate — uses void return type since we match by name+args.
+     */
+    private static String buildDescriptor(final String argsStr) {
+        if (argsStr.isEmpty()) {
+            return "()V";
+        }
+
+        final StringBuilder desc = new StringBuilder("(");
+        for (final String arg : argsStr.split(",")) {
+            final String typeName = arg.trim();
+            desc.append(toDescriptor(typeName));
+        }
+        desc.append(")V"); // return type doesn't matter for matching
+        return desc.toString();
+    }
+
+    private static String toDescriptor(final String typeName) {
+        return switch (typeName) {
+            case "boolean" -> "Z";
+            case "byte" -> "B";
+            case "char" -> "C";
+            case "short" -> "S";
+            case "int" -> "I";
+            case "long" -> "J";
+            case "float" -> "F";
+            case "double" -> "D";
+            case "void" -> "V";
+            default -> {
+                if (typeName.endsWith("[]")) {
+                    yield "[" + toDescriptor(typeName.substring(0, typeName.length() - 2));
+                }
+                yield "L" + typeName.replace('.', '/') + ";";
+            }
+        };
+    }
+
+    /**
+     * Holds parsed instrumentation configuration.
+     */
+    static final class InstrumentConfig {
+
+        // className -> set of method names to wrap
+        private final Map<String, Set<String>> methodsByClass = new LinkedHashMap<>();
+        // list of handler entries for the runtime config file
+        private final List<HandlerEntry> entries = new ArrayList<>();
+
+        void add(final String className, final String methodName, final String mode,
+                 final String descriptor, final String paramTypes) {
+            methodsByClass.computeIfAbsent(className, k -> new HashSet<>()).add(methodName);
+            entries.add(new HandlerEntry(mode, className, methodName, descriptor, paramTypes));
+        }
+
+        boolean isEmpty() {
+            return entries.isEmpty();
+        }
+
+        Set<String> getMethodsForClass(final String className) {
+            return methodsByClass.get(className);
+        }
+
+        /**
+         * Generate the META-INF/jackknife/handlers.properties content
+         * for runtime auto-discovery.
+         */
+        String toHandlerConfig() {
+            final StringBuilder sb = new StringBuilder();
+            sb.append("# Jackknife handler configuration — auto-generated\n");
+            sb.append("# Format: mode className methodName descriptor paramTypes\n");
+            for (final HandlerEntry entry : entries) {
+                sb.append(entry.mode).append(" ")
+                        .append(entry.className).append(" ")
+                        .append(entry.methodName).append(" ")
+                        .append(entry.descriptor);
+                if (!entry.paramTypes.isEmpty()) {
+                    sb.append(" ").append(entry.paramTypes);
+                }
+                sb.append("\n");
+            }
+            return sb.toString();
+        }
+
+        record HandlerEntry(String mode, String className, String methodName,
+                            String descriptor, String paramTypes) {
+        }
     }
 }
