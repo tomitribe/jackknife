@@ -168,14 +168,36 @@ public final class HandlerEnhancer {
                 argSlot += argTypes[i].getSize();
             }
 
-            // handler.invoke(this, null, args)
+            // Look up the renamed Method: Class.getDeclaredMethod("jackknife$name", paramTypes)
+            mv.visitLdcInsn(Type.getObjectType(classInternalName));
+            mv.visitLdcInsn(PREFIX + name);
+            mv.visitIntInsn(Opcodes.BIPUSH, argTypes.length);
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class");
+            for (int i = 0; i < argTypes.length; i++) {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitIntInsn(Opcodes.BIPUSH, i);
+                loadClassConstant(mv, argTypes[i]);
+                mv.visitInsn(Opcodes.AASTORE);
+            }
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Class", "getDeclaredMethod",
+                    "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;", false);
+
+            // method.setAccessible(true)
+            final int methodVar = argsArrayVar + 1;
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/reflect/Method", "setAccessible",
+                    "(Z)V", false);
+            mv.visitVarInsn(Opcodes.ASTORE, methodVar);
+
+            // handler.invoke(proxy, method, args)
             mv.visitVarInsn(Opcodes.ALOAD, handlerVar);
             if (isStatic) {
                 mv.visitInsn(Opcodes.ACONST_NULL); // no 'this' for static methods
             } else {
                 mv.visitVarInsn(Opcodes.ALOAD, 0); // this
             }
-            mv.visitInsn(Opcodes.ACONST_NULL); // Method parameter — resolved by handler
+            mv.visitVarInsn(Opcodes.ALOAD, methodVar);
             mv.visitVarInsn(Opcodes.ALOAD, argsArrayVar);
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, HANDLER_IFACE, "invoke",
                     "(Ljava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;)Ljava/lang/Object;",
@@ -302,6 +324,43 @@ public final class HandlerEnhancer {
                 default:
                     mv.visitTypeInsn(Opcodes.CHECKCAST, type.getInternalName());
                     mv.visitInsn(Opcodes.ARETURN);
+                    break;
+            }
+        }
+
+        /**
+         * Push a Class constant onto the stack for the given type.
+         * For primitives, loads the TYPE field (e.g., Integer.TYPE).
+         * For objects, uses LDC with the class type.
+         */
+        private static void loadClassConstant(final MethodVisitor mv, final Type type) {
+            switch (type.getSort()) {
+                case Type.BOOLEAN:
+                    mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Boolean", "TYPE", "Ljava/lang/Class;");
+                    break;
+                case Type.BYTE:
+                    mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Byte", "TYPE", "Ljava/lang/Class;");
+                    break;
+                case Type.CHAR:
+                    mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Character", "TYPE", "Ljava/lang/Class;");
+                    break;
+                case Type.SHORT:
+                    mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Short", "TYPE", "Ljava/lang/Class;");
+                    break;
+                case Type.INT:
+                    mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Integer", "TYPE", "Ljava/lang/Class;");
+                    break;
+                case Type.LONG:
+                    mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Long", "TYPE", "Ljava/lang/Class;");
+                    break;
+                case Type.FLOAT:
+                    mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Float", "TYPE", "Ljava/lang/Class;");
+                    break;
+                case Type.DOUBLE:
+                    mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/Double", "TYPE", "Ljava/lang/Class;");
+                    break;
+                default:
+                    mv.visitLdcInsn(type);
                     break;
             }
         }

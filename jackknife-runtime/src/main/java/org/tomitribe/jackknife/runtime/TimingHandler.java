@@ -36,9 +36,7 @@ public final class TimingHandler implements InvocationHandler {
 
     @Override
     public Object invoke(final Object proxy, final Method method, final Object[] args) throws Throwable {
-        final String methodName = proxy != null
-                ? proxy.getClass().getName() + "." + (method != null ? method.getName() : "unknown")
-                : (method != null ? method.getName() : "unknown");
+        final String methodName = DebugHandler.methodLabel(method);
 
         final long start = System.nanoTime();
         try {

@@ -53,9 +53,7 @@ public final class DebugHandler implements InvocationHandler {
 
     @Override
     public Object invoke(final Object proxy, final Method method, final Object[] args) throws Throwable {
-        final String label = proxy != null
-                ? proxy.getClass().getName() + "." + (method != null ? method.getName() : "unknown")
-                : (method != null ? method.getName() : "unknown");
+        final String label = methodLabel(method);
 
         // Log entry
         final String argsStr = formatArgs(args);
@@ -157,6 +155,14 @@ public final class DebugHandler implements InvocationHandler {
         }
 
         return "[file: " + file.getPath() + "]";
+    }
+
+    static String methodLabel(final Method method) {
+        if (method == null) {
+            return "unknown";
+        }
+        final String name = method.getName().replace("jackknife$", "");
+        return method.getDeclaringClass().getName() + "." + name;
     }
 
     private static File defaultCapturesDir() {

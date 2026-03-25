@@ -56,8 +56,29 @@ def logContent = buildLog.text
 def swapCount = (logContent =~ /Swapped \d+ modified jar/).count
 assert swapCount >= 2 : "ProcessMojo should swap jars for both modules (found ${swapCount} swap messages)"
 
+// -- INDEX: manifests for child module deps at reactor root --
+// Requires IndexMojo to be non-aggregator so it runs per-module
+// and sees each module's resolved dependencies.
+def manifestDir = new File(jackknife, 'manifest')
+assert manifestDir.exists() : 'manifest/ should exist at reactor root'
+
+def manifestGroupDir = new File(manifestDir, 'org.tomitribe.jackknife')
+assert manifestGroupDir.exists() : 'manifest groupId dir should exist'
+
+def manifests = manifestGroupDir.listFiles()?.findAll { it.name.endsWith('.manifest') }
+assert manifests != null && manifests.size() > 0 : 'Should have manifests for child module deps'
+
+def runtimeManifest = manifests.find { it.name.contains('jackknife-runtime') }
+assert runtimeManifest != null : 'Should have manifest for jackknife-runtime (child module dep)'
+
+// -- No duplicate manifests for shared dependency --
+def runtimeManifests = manifests.findAll { it.name.contains('jackknife-runtime') }
+assert runtimeManifests.size() == 1 : "Shared dep should have exactly 1 manifest (got ${runtimeManifests.size()})"
+
 println "Multi-module verification passed:"
 println "  .jackknife/ at reactor root: yes"
 println "  .jackknife/ absent from modules: yes"
+println "  manifest/ at reactor root: yes (${manifests.size()} manifests)"
+println "  No duplicate manifests: yes"
 println "  modified/ at reactor root: yes"
 println "  Jar swapped for both modules: yes (${swapCount} swaps)"

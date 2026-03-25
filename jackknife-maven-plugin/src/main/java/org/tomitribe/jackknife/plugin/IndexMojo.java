@@ -45,7 +45,7 @@ import java.util.jar.JarFile;
  *
  * Also generates USAGE.md.
  */
-@Mojo(name = "index", requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME, aggregator = true)
+@Mojo(name = "index", requiresDependencyResolution = ResolutionScope.TEST)
 public class IndexMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${project}", readonly = true, required = true)

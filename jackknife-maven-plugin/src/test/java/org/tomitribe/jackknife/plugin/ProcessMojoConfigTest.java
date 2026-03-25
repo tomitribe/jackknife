@@ -93,7 +93,6 @@ public class ProcessMojoConfigTest {
         assertTrue("Should contain mode", output.contains("debug"));
         assertTrue("Should contain class", output.contains("com.example.Foo"));
         assertTrue("Should contain method", output.contains("process"));
-        assertTrue("Should contain param types", output.contains("java.lang.String,int"));
     }
 
     @Test
@@ -124,8 +123,8 @@ public class ProcessMojoConfigTest {
         config.add("com.example.Bar", "execute", "timing", "int");
 
         final String output = config.toHandlerConfig();
-        assertTrue(output.contains("debug com.example.Foo process java.lang.String"));
-        assertTrue(output.contains("timing com.example.Bar execute int"));
+        assertTrue(output.contains("debug com.example.Foo process"));
+        assertTrue(output.contains("timing com.example.Bar execute"));
     }
 
     @Test

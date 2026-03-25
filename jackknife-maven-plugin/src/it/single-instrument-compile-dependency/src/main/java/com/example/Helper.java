@@ -14,25 +14,14 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-package org.tomitribe.jackknife.runtime;
-
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+package com.example;
 
 /**
- * The final handler in the chain — calls the renamed original method.
- * The wrapper bytecode passes the actual renamed Method, so ProceedHandler
- * just invokes it directly.
+ * A helper class in src/main. Knows nothing about jackknife.
  */
-public final class ProceedHandler implements InvocationHandler {
+public class Helper {
 
-    @Override
-    public Object invoke(final Object proxy, final Method method, final Object[] args) throws Throwable {
-        try {
-            return method.invoke(proxy, args);
-        } catch (final InvocationTargetException e) {
-            throw e.getCause();
-        }
+    public static String format(final String input) {
+        return "[" + input + "]";
     }
 }

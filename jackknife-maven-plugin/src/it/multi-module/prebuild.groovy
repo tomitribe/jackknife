@@ -15,26 +15,10 @@
  * under the License.
  */
 
-// Run jackknife:index first to create manifests, then set up instrument config.
+// Set up instrument config at reactor root.
+// The index and process goals are lifecycle-bound (initialize phase),
+// so they run automatically during `mvn compile`.
 
-def mvnCmd = System.getProperty('os.name').toLowerCase().contains('win') ? 'mvn.cmd' : 'mvn'
-def clonedSettings = new File(basedir.parentFile, 'settings.xml')
-def settingsArg = clonedSettings.exists() ? ['-s', clonedSettings.absolutePath] : []
-
-// Run index
-def cmd = [mvnCmd] + settingsArg + ['jackknife:index', '-B']
-println "Prebuild: running ${cmd.join(' ')}"
-
-def proc = new ProcessBuilder(cmd)
-    .directory(basedir)
-    .redirectErrorStream(true)
-    .start()
-
-proc.inputStream.eachLine { println "  [prebuild] ${it}" }
-def exitCode = proc.waitFor()
-assert exitCode == 0 : "Prebuild jackknife:index failed with exit code ${exitCode}"
-
-// Set up instrument config at reactor root
 def localRepo = new File(basedir, '../../local-repo')
 def runtimeDir = new File(localRepo, 'org/tomitribe/jackknife/jackknife-runtime')
 def versionDirs = runtimeDir.listFiles()?.findAll { it.isDirectory() }

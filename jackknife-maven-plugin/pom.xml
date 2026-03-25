@@ -92,6 +92,7 @@
           <streamLogs>true</streamLogs>
           <extraArtifacts>
             <extraArtifact>org.tomitribe.jackknife:jackknife-runtime:${project.version}</extraArtifact>
+            <extraArtifact>org.tomitribe:tomitribe-util:1.3.23</extraArtifact>
           </extraArtifacts>
         </configuration>
         <executions>

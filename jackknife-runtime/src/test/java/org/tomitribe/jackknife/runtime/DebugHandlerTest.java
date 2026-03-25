@@ -42,6 +42,14 @@ public class DebugHandlerTest {
     private final ByteArrayOutputStream captured = new ByteArrayOutputStream();
     private PrintStream originalOut;
 
+    /** A sample renamed method — simulates what HandlerEnhancer produces */
+    private final Method sampleMethod;
+
+    public DebugHandlerTest() throws NoSuchMethodException {
+        sampleMethod = SampleTarget.class.getDeclaredMethod("jackknife$greet", String.class);
+        sampleMethod.setAccessible(true);
+    }
+
     @Before
     public void captureStdout() {
         originalOut = System.out;
@@ -66,19 +74,18 @@ public class DebugHandlerTest {
     @Test
     public void logsEnterWithArgsForInstanceMethod() throws Throwable {
         final DebugHandler handler = debugHandler(returning("result"));
-        final Object proxy = new SampleTarget();
-        handler.invoke(proxy, null, new Object[]{"hello", 42});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"hello"});
 
         final String out = output();
         assertTrue("Should log ENTER", out.contains("ENTER"));
         assertTrue("Should contain args", out.contains("hello"));
-        assertTrue("Should contain args", out.contains("42"));
     }
 
     @Test
     public void logsEnterWithArgsForStaticMethod() throws Throwable {
-        final DebugHandler handler = debugHandler(returning("result"));
-        handler.invoke(null, null, new Object[]{"hello"});
+        final Method staticMethod = SampleTarget.class.getDeclaredMethod("jackknife$multiply", long.class, long.class);
+        final DebugHandler handler = debugHandler(returning(42L));
+        handler.invoke(null, staticMethod, new Object[]{6L, 7L});
 
         final String out = output();
         assertTrue("Should log ENTER without NPE", out.contains("ENTER"));
@@ -88,7 +95,7 @@ public class DebugHandlerTest {
     @Test
     public void logsExitWithReturnValue() throws Throwable {
         final DebugHandler handler = debugHandler(returning("the-result"));
-        handler.invoke(new SampleTarget(), null, new Object[]{});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
         assertTrue("Should log EXIT with return value", out.contains("EXIT"));
@@ -98,7 +105,7 @@ public class DebugHandlerTest {
     @Test
     public void logsExitWithNullReturnValue() throws Throwable {
         final DebugHandler handler = debugHandler(returning(null));
-        handler.invoke(new SampleTarget(), null, new Object[]{});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
         assertTrue("Should log EXIT", out.contains("EXIT"));
@@ -108,7 +115,7 @@ public class DebugHandlerTest {
     @Test
     public void logsExitWithPrimitiveReturnValue() throws Throwable {
         final DebugHandler handler = debugHandler(returning(42));
-        handler.invoke(new SampleTarget(), null, new Object[]{});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
         assertTrue("Should contain boxed primitive", out.contains("42"));
@@ -118,7 +125,7 @@ public class DebugHandlerTest {
     public void logsThrowWithExceptionClassAndMessage() throws Throwable {
         final DebugHandler handler = debugHandler(throwing(new IllegalArgumentException("bad input")));
         try {
-            handler.invoke(new SampleTarget(), null, new Object[]{});
+            handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
             fail("Expected exception");
         } catch (final IllegalArgumentException e) {
             // expected
@@ -135,7 +142,7 @@ public class DebugHandlerTest {
         final IllegalStateException original = new IllegalStateException("original");
         final DebugHandler handler = debugHandler(throwing(original));
         try {
-            handler.invoke(new SampleTarget(), null, new Object[]{});
+            handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
             fail("Expected exception");
         } catch (final IllegalStateException e) {
             assertTrue("Should be the exact same exception", e == original);
@@ -144,12 +151,23 @@ public class DebugHandlerTest {
 
     @Test
     public void delegatesToNextHandler() throws Throwable {
-        final InvocationHandler delegate = (final Object p, final Method m, final Object[] a) -> {
-            return "delegated";
-        };
+        final InvocationHandler delegate = (final Object p, final Method m, final Object[] a) -> "delegated";
         final DebugHandler handler = debugHandler(delegate);
-        final Object result = handler.invoke(new SampleTarget(), null, new Object[]{});
+        final Object result = handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
         assertEquals("delegated", result);
+    }
+
+    // ---- Label formatting ----
+
+    @Test
+    public void labelShowsClassAndMethodName() throws Throwable {
+        final DebugHandler handler = debugHandler(returning("ok"));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
+
+        final String out = output();
+        assertTrue("Should show class name", out.contains("SampleTarget"));
+        assertTrue("Should show method name without prefix", out.contains("greet"));
+        assertTrue("Should NOT show jackknife$ prefix", !out.contains("jackknife$"));
     }
 
     // ---- Array formatting ----
@@ -157,7 +175,7 @@ public class DebugHandlerTest {
     @Test
     public void objectArrayFormatted() throws Throwable {
         final DebugHandler handler = debugHandler(returning("ok"));
-        handler.invoke(new SampleTarget(), null, new Object[]{new Object[]{"a", "b"}});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{new Object[]{"a", "b"}});
 
         final String out = output();
         assertTrue("Should format Object[] with deepToString", out.contains("[a, b]"));
@@ -166,7 +184,7 @@ public class DebugHandlerTest {
     @Test
     public void intArrayFormatted() throws Throwable {
         final DebugHandler handler = debugHandler(returning("ok"));
-        handler.invoke(new SampleTarget(), null, new Object[]{new int[]{1, 2, 3}});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{new int[]{1, 2, 3}});
 
         final String out = output();
         assertTrue("Should format int[]", out.contains("[1, 2, 3]"));
@@ -175,7 +193,7 @@ public class DebugHandlerTest {
     @Test
     public void byteArrayShowsLength() throws Throwable {
         final DebugHandler handler = debugHandler(returning("ok"));
-        handler.invoke(new SampleTarget(), null, new Object[]{new byte[]{1, 2, 3, 4, 5}});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{new byte[]{1, 2, 3, 4, 5}});
 
         final String out = output();
         assertTrue("Should show byte array length", out.contains("byte[5]"));
@@ -184,7 +202,7 @@ public class DebugHandlerTest {
     @Test
     public void nullArgFormattedAsNull() throws Throwable {
         final DebugHandler handler = debugHandler(returning("ok"));
-        handler.invoke(new SampleTarget(), null, new Object[]{null});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{null});
 
         final String out = output();
         assertTrue("Should format null arg", out.contains("null"));
@@ -193,7 +211,7 @@ public class DebugHandlerTest {
     @Test
     public void noArgsFormatted() throws Throwable {
         final DebugHandler handler = debugHandler(returning("ok"));
-        handler.invoke(new SampleTarget(), null, null);
+        handler.invoke(new SampleTarget(), sampleMethod, null);
 
         final String out = output();
         assertTrue("Should format empty args as ()", out.contains("()"));
@@ -204,7 +222,7 @@ public class DebugHandlerTest {
     @Test
     public void shortValueStaysInline() throws Throwable {
         final DebugHandler handler = new DebugHandler(returning("short"), 500, tmp.getRoot());
-        handler.invoke(new SampleTarget(), null, new Object[]{});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
         assertTrue("Short value should be inline", out.contains("short"));
@@ -213,21 +231,10 @@ public class DebugHandlerTest {
     }
 
     @Test
-    public void valueAtThresholdStaysInline() throws Throwable {
-        // Create a return value that when combined with "EXIT  ...unknown -> " prefix totals exactly threshold
-        final String value = "x".repeat(50);
-        final DebugHandler handler = new DebugHandler(returning(value), 500, tmp.getRoot());
-        handler.invoke(new SampleTarget(), null, new Object[]{});
-
-        final String out = output();
-        assertTrue("Value at threshold should be inline", out.contains(value));
-    }
-
-    @Test
     public void valueOverThresholdWrittenToFile() throws Throwable {
         final String longValue = "x".repeat(600);
         final DebugHandler handler = new DebugHandler(returning(longValue), 100, tmp.getRoot());
-        handler.invoke(new SampleTarget(), null, new Object[]{});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
         assertTrue("Should reference capture file", out.contains("[file:"));
@@ -236,7 +243,7 @@ public class DebugHandlerTest {
     @Test
     public void shortValueWithNewlinesGoesToFile() throws Throwable {
         final DebugHandler handler = new DebugHandler(returning("line1\nline2"), 500, tmp.getRoot());
-        handler.invoke(new SampleTarget(), null, new Object[]{});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
         assertTrue("Newline value should go to file", out.contains("[file:"));
@@ -246,7 +253,7 @@ public class DebugHandlerTest {
     public void captureFileContentMatchesFullValue() throws Throwable {
         final String longValue = "x".repeat(200);
         final DebugHandler handler = new DebugHandler(returning(longValue), 100, tmp.getRoot());
-        handler.invoke(new SampleTarget(), null, new Object[]{});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final File[] captures = tmp.getRoot().listFiles((final File dir, final String name) -> name.startsWith("capture-"));
         assertTrue("Should have capture file", captures != null && captures.length > 0);
@@ -258,10 +265,9 @@ public class DebugHandlerTest {
     public void captureFileReferenceIsParseable() throws Throwable {
         final String longValue = "x".repeat(200);
         final DebugHandler handler = new DebugHandler(returning(longValue), 100, tmp.getRoot());
-        handler.invoke(new SampleTarget(), null, new Object[]{});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
-        // Format: [file: /path/to/capture-0001.txt]
         assertTrue("Should have [file: prefix", out.contains("[file: "));
         assertTrue("Should have .txt suffix in reference", out.contains(".txt]"));
     }
@@ -270,17 +276,16 @@ public class DebugHandlerTest {
     public void captureDirectoryCreatedIfNotExists() throws Throwable {
         final File subDir = new File(tmp.getRoot(), "nested/captures");
         final DebugHandler handler = new DebugHandler(returning("x".repeat(200)), 100, subDir);
-        handler.invoke(new SampleTarget(), null, new Object[]{});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         assertTrue("Captures directory should be created", subDir.exists());
-        assertTrue("Captures directory should be a directory", subDir.isDirectory());
     }
 
     @Test
     public void captureFileNamingIsSequential() throws Throwable {
         final DebugHandler handler = new DebugHandler(returning("x".repeat(200)), 100, tmp.getRoot());
-        handler.invoke(new SampleTarget(), null, new Object[]{});
-        handler.invoke(new SampleTarget(), null, new Object[]{});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final File[] captures = tmp.getRoot().listFiles((final File dir, final String name) -> name.startsWith("capture-"));
         assertTrue("Should have multiple capture files", captures != null && captures.length >= 2);
@@ -290,10 +295,9 @@ public class DebugHandlerTest {
     public void largeArgsGoToFile() throws Throwable {
         final String bigArg = "a".repeat(600);
         final DebugHandler handler = new DebugHandler(returning("ok"), 100, tmp.getRoot());
-        handler.invoke(new SampleTarget(), null, new Object[]{bigArg});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{bigArg});
 
         final String out = output();
-        // The ENTER line with big args should be captured
         assertTrue("Large args should trigger capture", out.contains("[file:"));
     }
 

@@ -54,7 +54,7 @@ import java.util.jar.JarOutputStream;
  * Bound to the initialize phase so it runs before compilation.
  */
 @Mojo(name = "process", defaultPhase = LifecyclePhase.INITIALIZE,
-        requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME)
+        requiresDependencyResolution = ResolutionScope.TEST)
 public class ProcessMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
@@ -346,15 +346,11 @@ public class ProcessMojo extends AbstractMojo {
         String toHandlerConfig() {
             final StringBuilder sb = new StringBuilder();
             sb.append("# Jackknife handler configuration — auto-generated\n");
-            sb.append("# Format: mode className methodName [paramTypes]\n");
+            sb.append("# Format: mode className methodName\n");
             for (final HandlerEntry entry : entries) {
                 sb.append(entry.mode).append(" ")
                         .append(entry.className).append(" ")
-                        .append(entry.methodName);
-                if (!entry.paramTypes.isEmpty()) {
-                    sb.append(" ").append(entry.paramTypes);
-                }
-                sb.append("\n");
+                        .append(entry.methodName).append("\n");
             }
             return sb.toString();
         }

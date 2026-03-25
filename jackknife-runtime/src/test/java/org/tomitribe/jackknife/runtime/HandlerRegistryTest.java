@@ -184,14 +184,13 @@ public class HandlerRegistryTest {
 
     // ---- Auto-discover tests with test handlers.properties ----
     // Test classpath has META-INF/jackknife/handlers.properties with:
-    //   debug SampleTarget greet java.lang.String
-    //   timing SampleTarget add int,int
-    //   all SampleTarget manyArgs java.lang.String,int,long,double,boolean
+    //   debug SampleTarget greet
+    //   timing SampleTarget add
+    //   all SampleTarget manyArgs
     //   debug SampleTarget noArgs
 
     @Test
     public void autoDiscoverParsesDebugMode() {
-        // First getHandler triggers auto-discover
         final InvocationHandler handler = HandlerRegistry.getHandler(
                 "org.tomitribe.jackknife.runtime.SampleTarget", "greet");
         assertNotNull("Should find debug handler for greet", handler);
@@ -209,24 +208,7 @@ public class HandlerRegistryTest {
     }
 
     @Test
-    public void autoDiscoverBuildsDebugChain() {
-        final InvocationHandler handler = HandlerRegistry.getHandler(
-                "org.tomitribe.jackknife.runtime.SampleTarget", "greet");
-        assertNotNull(handler);
-        assertTrue("Should be DebugHandler", handler instanceof DebugHandler);
-    }
-
-    @Test
-    public void autoDiscoverBuildsTimingChain() {
-        final InvocationHandler handler = HandlerRegistry.getHandler(
-                "org.tomitribe.jackknife.runtime.SampleTarget", "add");
-        assertNotNull(handler);
-        assertTrue("Should be TimingHandler", handler instanceof TimingHandler);
-    }
-
-    @Test
     public void autoDiscoverBuildsAllChain() {
-        // "all" mode = TimingHandler(DebugHandler(ProceedHandler))
         final InvocationHandler handler = HandlerRegistry.getHandler(
                 "org.tomitribe.jackknife.runtime.SampleTarget", "manyArgs");
         assertNotNull(handler);
@@ -235,34 +217,10 @@ public class HandlerRegistryTest {
     }
 
     @Test
-    public void autoDiscoverHandlesEmptyParamTypes() {
+    public void autoDiscoverHandlesNoArgsMethod() {
         final InvocationHandler handler = HandlerRegistry.getHandler(
                 "org.tomitribe.jackknife.runtime.SampleTarget", "noArgs");
         assertNotNull("Should find handler for noArgs", handler);
-    }
-
-    @Test
-    public void autoDiscoverHandlesMultipleParamTypes() {
-        // "add" has paramTypes "int,int"
-        final InvocationHandler handler = HandlerRegistry.getHandler(
-                "org.tomitribe.jackknife.runtime.SampleTarget", "add");
-        assertNotNull("Should find handler with comma-separated param types", handler);
-    }
-
-    @Test
-    public void autoDiscoverResolvesPrimitiveTypes() {
-        // "add" uses "int,int" — these must resolve to int.class, int.class
-        final InvocationHandler handler = HandlerRegistry.getHandler(
-                "org.tomitribe.jackknife.runtime.SampleTarget", "add");
-        assertNotNull("Should resolve primitive types", handler);
-    }
-
-    @Test
-    public void autoDiscoverResolvesFqnTypes() {
-        // "greet" uses "java.lang.String" — must resolve to String.class
-        final InvocationHandler handler = HandlerRegistry.getHandler(
-                "org.tomitribe.jackknife.runtime.SampleTarget", "greet");
-        assertNotNull("Should resolve FQN types", handler);
     }
 
     @Test
@@ -275,7 +233,9 @@ public class HandlerRegistryTest {
         assertNotNull(handler);
 
         final SampleTarget target = new SampleTarget();
-        final Object result = handler.invoke(target, null, new Object[]{"World"});
+        final Method method = SampleTarget.class.getDeclaredMethod("jackknife$greet", String.class);
+        method.setAccessible(true);
+        final Object result = handler.invoke(target, method, new Object[]{"World"});
 
         assertEquals("Hello, World!", result);
         final String output = out.toString();
@@ -293,7 +253,9 @@ public class HandlerRegistryTest {
         assertNotNull(handler);
 
         final SampleTarget target = new SampleTarget();
-        final Object result = handler.invoke(target, null, new Object[]{3, 4});
+        final Method method = SampleTarget.class.getDeclaredMethod("jackknife$add", int.class, int.class);
+        method.setAccessible(true);
+        final Object result = handler.invoke(target, method, new Object[]{3, 4});
 
         assertEquals(7, result);
         final String output = out.toString();

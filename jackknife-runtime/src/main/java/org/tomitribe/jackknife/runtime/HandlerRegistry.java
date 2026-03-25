@@ -121,8 +121,8 @@ public final class HandlerRegistry {
                     continue;
                 }
 
-                // Format: mode className methodName [paramTypes]
-                final String[] parts = line.split("\\s+", 4);
+                // Format: mode className methodName
+                final String[] parts = line.split("\\s+", 3);
                 if (parts.length < 3) {
                     continue;
                 }
@@ -130,11 +130,8 @@ public final class HandlerRegistry {
                 final String mode = parts[0];
                 final String className = parts[1];
                 final String methodName = parts[2];
-                final String paramTypesStr = parts.length > 3 ? parts[3] : "";
 
-                final Class<?>[] paramTypes = parseParamTypes(paramTypesStr);
-
-                final ProceedHandler proceed = new ProceedHandler(className, methodName, paramTypes);
+                final ProceedHandler proceed = new ProceedHandler();
                 final InvocationHandler handler = buildChain(mode, proceed);
 
                 register(className, methodName, handler);
@@ -156,45 +153,6 @@ public final class HandlerRegistry {
             case "timing" -> new TimingHandler(proceed);
             case "all" -> new TimingHandler(new DebugHandler(proceed));
             default -> proceed;
-        };
-    }
-
-    /**
-     * Parse comma-separated parameter type names into Class objects.
-     */
-    private static Class<?>[] parseParamTypes(final String paramTypesStr) {
-        if (paramTypesStr == null || paramTypesStr.isEmpty()) {
-            return new Class<?>[0];
-        }
-
-        final String[] typeNames = paramTypesStr.split(",");
-        final Class<?>[] types = new Class<?>[typeNames.length];
-
-        for (int i = 0; i < typeNames.length; i++) {
-            types[i] = resolveType(typeNames[i].trim());
-        }
-
-        return types;
-    }
-
-    private static Class<?> resolveType(final String name) {
-        return switch (name) {
-            case "boolean" -> boolean.class;
-            case "byte" -> byte.class;
-            case "char" -> char.class;
-            case "short" -> short.class;
-            case "int" -> int.class;
-            case "long" -> long.class;
-            case "float" -> float.class;
-            case "double" -> double.class;
-            case "void" -> void.class;
-            default -> {
-                try {
-                    yield Class.forName(name);
-                } catch (final ClassNotFoundException e) {
-                    throw new IllegalStateException("Cannot resolve type: " + name, e);
-                }
-            }
         };
     }
 

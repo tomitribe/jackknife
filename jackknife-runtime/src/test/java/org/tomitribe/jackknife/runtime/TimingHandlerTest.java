@@ -33,6 +33,12 @@ public class TimingHandlerTest {
 
     private final ByteArrayOutputStream captured = new ByteArrayOutputStream();
     private PrintStream originalOut;
+    private final Method sampleMethod;
+
+    public TimingHandlerTest() throws NoSuchMethodException {
+        sampleMethod = SampleTarget.class.getDeclaredMethod("jackknife$greet", String.class);
+        sampleMethod.setAccessible(true);
+    }
 
     @Before
     public void captureStdout() {
@@ -52,7 +58,7 @@ public class TimingHandlerTest {
     @Test
     public void logsTimingWithElapsedTime() throws Throwable {
         final TimingHandler handler = new TimingHandler(returning("ok"));
-        handler.invoke(new SampleTarget(), null, new Object[]{});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
         assertTrue("Should log TIMING", out.contains("TIMING"));
@@ -60,12 +66,10 @@ public class TimingHandlerTest {
 
     @Test
     public void formatsNanosecondsCorrectly() throws Throwable {
-        // We can't control exact timing, but we can verify the format
         final TimingHandler handler = new TimingHandler(returning("ok"));
-        handler.invoke(new SampleTarget(), null, new Object[]{});
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
 
         final String out = output();
-        // Should end with a time unit: ns, us, ms, or s
         assertTrue("Should have time unit",
                 out.contains("ns") || out.contains("us") || out.contains("ms")
                         || out.matches(".*\\d+\\.\\d+s.*"));
@@ -73,8 +77,9 @@ public class TimingHandlerTest {
 
     @Test
     public void staticMethodNullProxy() throws Throwable {
-        final TimingHandler handler = new TimingHandler(returning("ok"));
-        handler.invoke(null, null, new Object[]{});
+        final Method staticMethod = SampleTarget.class.getDeclaredMethod("jackknife$multiply", long.class, long.class);
+        final TimingHandler handler = new TimingHandler(returning(42L));
+        handler.invoke(null, staticMethod, new Object[]{6L, 7L});
 
         final String out = output();
         assertTrue("Should log TIMING without NPE", out.contains("TIMING"));
@@ -84,7 +89,7 @@ public class TimingHandlerTest {
     public void delegatesToNextHandler() throws Throwable {
         final InvocationHandler delegate = (final Object p, final Method m, final Object[] a) -> "delegated";
         final TimingHandler handler = new TimingHandler(delegate);
-        final Object result = handler.invoke(new SampleTarget(), null, new Object[]{});
+        final Object result = handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
         assertEquals("delegated", result);
     }
 
@@ -92,7 +97,7 @@ public class TimingHandlerTest {
     public void exceptionInDelegateStillLogsTiming() throws Throwable {
         final TimingHandler handler = new TimingHandler(throwing(new RuntimeException("boom")));
         try {
-            handler.invoke(new SampleTarget(), null, new Object[]{});
+            handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
             fail("Expected RuntimeException");
         } catch (final RuntimeException e) {
             assertEquals("boom", e.getMessage());
@@ -100,6 +105,17 @@ public class TimingHandlerTest {
 
         final String out = output();
         assertTrue("Should still log TIMING after exception", out.contains("TIMING"));
+    }
+
+    @Test
+    public void labelShowsClassAndMethodName() throws Throwable {
+        final TimingHandler handler = new TimingHandler(returning("ok"));
+        handler.invoke(new SampleTarget(), sampleMethod, new Object[]{"x"});
+
+        final String out = output();
+        assertTrue("Should show class name", out.contains("SampleTarget"));
+        assertTrue("Should show method name without prefix", out.contains("greet"));
+        assertTrue("Should NOT show jackknife$ prefix", !out.contains("jackknife$"));
     }
 
     private static InvocationHandler returning(final Object value) {

@@ -14,25 +14,24 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-package org.tomitribe.jackknife.runtime;
+package com.example;
 
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+import org.tomitribe.util.Join;
+
+import java.util.Arrays;
 
 /**
- * The final handler in the chain — calls the renamed original method.
- * The wrapper bytecode passes the actual renamed Method, so ProceedHandler
- * just invokes it directly.
+ * A normal application class that uses a compile-scope dependency.
+ * Knows nothing about jackknife.
  */
-public final class ProceedHandler implements InvocationHandler {
+public class App {
 
-    @Override
-    public Object invoke(final Object proxy, final Method method, final Object[] args) throws Throwable {
-        try {
-            return method.invoke(proxy, args);
-        } catch (final InvocationTargetException e) {
-            throw e.getCause();
-        }
+    public String process(final String csv) {
+        final String[] parts = csv.split(",");
+        return Join.join(" and ", Arrays.asList(parts));
+    }
+
+    public String format(final String input) {
+        return Helper.format(input);
     }
 }
