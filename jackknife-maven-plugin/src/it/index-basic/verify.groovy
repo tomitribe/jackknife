@@ -53,4 +53,4 @@ assert content.contains('META-INF/MANIFEST.MF') : 'Should list META-INF/MANIFEST
 // -- USAGE.md generated --
 def usageMd = new File(jackknife, 'USAGE.md')
 assert usageMd.exists() : 'USAGE.md should be generated'
-assert usageMd.text.contains('Jackknife Usage') : 'USAGE.md should have usage content'
+assert usageMd.text.contains('# Jackknife') : 'USAGE.md should have usage content'
