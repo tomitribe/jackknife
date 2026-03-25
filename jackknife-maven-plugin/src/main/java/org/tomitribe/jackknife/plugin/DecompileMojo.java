@@ -40,6 +40,7 @@ import java.util.jar.Manifest;
  * Prints to stdout and caches to .jackknife/source/.
  *
  * Usage: mvn jackknife:decompile -Dclass=com.example.MyClass
+ *        mvn jackknife:decompile -Dclass=com.example.MyClass -Dforce=true
  */
 @Mojo(name = "decompile", requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME, aggregator = true)
 public class DecompileMojo extends AbstractMojo {
@@ -53,6 +54,9 @@ public class DecompileMojo extends AbstractMojo {
     @Parameter(property = "class", required = true)
     private String className;
 
+    @Parameter(property = "force", defaultValue = "false")
+    private boolean force;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         final String classPath = className.replace('.', '/');
@@ -60,9 +64,9 @@ public class DecompileMojo extends AbstractMojo {
         final File jackknife = new File(rootDir, ".jackknife");
         final File sourceDir = new File(jackknife, "source");
 
-        // Check cache first
+        // Check cache first (unless force=true)
         final File cachedFile = new File(sourceDir, className.replace('.', '/') + ".java");
-        if (cachedFile.exists()) {
+        if (!force && cachedFile.exists()) {
             getLog().info("Using cached source: " + cachedFile.getPath());
             printFile(cachedFile);
             return;
@@ -70,6 +74,7 @@ public class DecompileMojo extends AbstractMojo {
 
         // Find which jar contains this class
         File targetJar = null;
+        String artifactLabel = null;
         final Set<Artifact> artifacts = project.getArtifacts();
         for (final Artifact artifact : artifacts) {
             final File file = artifact.getFile();
@@ -80,7 +85,8 @@ public class DecompileMojo extends AbstractMojo {
             try (final java.util.jar.JarFile jar = new java.util.jar.JarFile(file)) {
                 if (jar.getEntry(classPath + ".class") != null) {
                     targetJar = file;
-                    getLog().info("Found " + className + " in " + artifact.getGroupId() + ":" + artifact.getArtifactId() + ":" + artifact.getVersion());
+                    artifactLabel = artifact.getGroupId() + ":" + artifact.getArtifactId() + ":" + artifact.getVersion();
+                    getLog().info("Found " + className + " in " + artifactLabel);
                     break;
                 }
             } catch (final IOException e) {
@@ -93,11 +99,16 @@ public class DecompileMojo extends AbstractMojo {
         }
 
         // Decompile with Vineflower
+        // Use exact class path + ".java" for matching, not prefix
         cachedFile.getParentFile().mkdirs();
-        final CaptureResultSaver saver = new CaptureResultSaver(cachedFile, classPath);
+        final String expectedEntryName = classPath + ".java";
+        final CaptureResultSaver saver = new CaptureResultSaver(cachedFile, expectedEntryName);
 
         final Decompiler decompiler = Decompiler.builder()
                 .inputs(targetJar)
+                // Use exact class path for prefix (Vineflower will also decompile
+                // inner classes like CustomField$Inner, but our saver only captures
+                // the exact match)
                 .allowedPrefixes(classPath)
                 .output(saver)
                 .option(IFernflowerPreferences.LOG_LEVEL, "error")
@@ -126,7 +137,6 @@ public class DecompileMojo extends AbstractMojo {
     private void printFile(final File file) throws MojoExecutionException {
         try {
             final String content = java.nio.file.Files.readString(file.toPath());
-            // Print directly to System.out to avoid Maven log prefix
             System.out.println(content);
         } catch (final IOException e) {
             throw new MojoExecutionException("Failed to read " + file, e);
@@ -136,16 +146,19 @@ public class DecompileMojo extends AbstractMojo {
     /**
      * IResultSaver that captures decompiled output for a specific class,
      * writes to a cache file, and ignores everything else.
+     *
+     * Uses exact entry name matching to avoid capturing similarly-named
+     * classes (e.g., CustomFieldDisplayType when CustomField was requested).
      */
     private static class CaptureResultSaver implements IResultSaver {
 
         private final File outputFile;
-        private final String targetClassPath;
+        private final String expectedEntryName;
         private boolean captured;
 
-        CaptureResultSaver(final File outputFile, final String targetClassPath) {
+        CaptureResultSaver(final File outputFile, final String expectedEntryName) {
             this.outputFile = outputFile;
-            this.targetClassPath = targetClassPath;
+            this.expectedEntryName = expectedEntryName;
         }
 
         boolean hasCaptured() {
@@ -156,20 +169,32 @@ public class DecompileMojo extends AbstractMojo {
         public void saveClassEntry(final String path, final String archiveName,
                                    final String qualifiedName, final String entryName,
                                    final String content) {
-            if (content != null && entryName != null && entryName.startsWith(targetClassPath)) {
-                try (final PrintWriter out = new PrintWriter(new FileWriter(outputFile))) {
-                    out.print(content);
-                    captured = true;
-                } catch (final IOException e) {
-                    throw new RuntimeException("Failed to write decompiled source to " + outputFile, e);
-                }
+            if (captured) {
+                return;
+            }
+            if (content != null && entryName != null && entryName.equals(expectedEntryName)) {
+                writeContent(content);
             }
         }
 
         @Override
         public void saveClassFile(final String path, final String qualifiedName,
                                   final String entryName, final String content, final int[] mapping) {
-            saveClassEntry(path, null, qualifiedName, entryName, content);
+            if (captured) {
+                return;
+            }
+            if (content != null && entryName != null && entryName.equals(expectedEntryName)) {
+                writeContent(content);
+            }
+        }
+
+        private void writeContent(final String content) {
+            try (final PrintWriter out = new PrintWriter(new FileWriter(outputFile))) {
+                out.print(content);
+                captured = true;
+            } catch (final IOException e) {
+                throw new RuntimeException("Failed to write decompiled source to " + outputFile, e);
+            }
         }
 
         @Override
