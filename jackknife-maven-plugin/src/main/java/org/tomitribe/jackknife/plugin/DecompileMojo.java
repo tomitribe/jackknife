@@ -40,7 +40,6 @@ import java.util.jar.Manifest;
  * Prints to stdout and caches to .jackknife/source/.
  *
  * Usage: mvn jackknife:decompile -Dclass=com.example.MyClass
- *        mvn jackknife:decompile -Dclass=com.example.MyClass -Dforce=true
  */
 @Mojo(name = "decompile", requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME, aggregator = true)
 public class DecompileMojo extends AbstractMojo {
@@ -54,9 +53,6 @@ public class DecompileMojo extends AbstractMojo {
     @Parameter(property = "class", required = true)
     private String className;
 
-    @Parameter(property = "force", defaultValue = "false")
-    private boolean force;
-
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         final String classPath = className.replace('.', '/');
@@ -64,13 +60,7 @@ public class DecompileMojo extends AbstractMojo {
         final File jackknife = new File(rootDir, ".jackknife");
         final File sourceDir = new File(jackknife, "source");
 
-        // Check cache first (unless force=true)
         final File cachedFile = new File(sourceDir, className.replace('.', '/') + ".java");
-        if (!force && cachedFile.exists()) {
-            getLog().info("Using cached source: " + cachedFile.getPath());
-            printFile(cachedFile);
-            return;
-        }
 
         // Find which jar contains this class
         File targetJar = null;
@@ -96,6 +86,13 @@ public class DecompileMojo extends AbstractMojo {
 
         if (targetJar == null) {
             throw new MojoFailureException("Class not found in any dependency: " + className);
+        }
+
+        // Use cache if it exists and is newer than the source jar
+        if (cachedFile.exists() && cachedFile.lastModified() >= targetJar.lastModified()) {
+            getLog().info("Using cached source: " + cachedFile.getPath());
+            printFile(cachedFile);
+            return;
         }
 
         // Decompile with Vineflower
