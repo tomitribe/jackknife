@@ -26,7 +26,7 @@
 
   <groupId>org.tomitribe.jackknife</groupId>
   <artifactId>jackknife</artifactId>
-  <version>0.2-SNAPSHOT</version>
+  <version>0.2</version>
   <packaging>pom</packaging>
   <name>Jackknife</name>
   <description>A Maven plugin for inspecting, decompiling, and instrumenting Java jar dependencies</description>
@@ -35,7 +35,7 @@
     <connection>scm:git:git@github.com:tomitribe/jackknife.git</connection>
     <url>scm:git:git@github.com:tomitribe/jackknife.git</url>
     <developerConnection>scm:git:git@github.com:tomitribe/jackknife.git</developerConnection>
-    <tag>HEAD</tag>
+    <tag>jackknife-0.2</tag>
   </scm>
 
   <developers>
