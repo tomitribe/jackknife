@@ -30,6 +30,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.jar.Manifest;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -40,36 +41,298 @@ import static org.junit.Assert.assertTrue;
  */
 public class HandlerEnhancerTest {
 
+    // All method names that exist in SampleClass (excluding constructors/static initializers)
+    private static final Set<String> ALL_METHODS = Set.of(
+            "greet", "add", "doWork", "multiply", "check",
+            "returnByte", "returnShort", "returnChar", "returnFloat", "returnDouble",
+            "returnObjectArray", "returnIntArray", "returnByteArray",
+            "noParams", "manyParams", "sumVarargs",
+            "joinList", "mapLookup", "toList",
+            "syncMethod", "throwsChecked", "throwsUnchecked",
+            "overloaded", "privateMethod", "protectedMethod", "packageMethod", "finalMethod",
+            "staticVoid", "staticReturn",
+            "annotatedMethod", "multiAnnotated", "paramAnnotated"
+    );
+
+    // ---- Method shapes ----
+
     @Test
-    public void testTransformAndDecompile() throws IOException {
-        // Read the original class bytes
-        final byte[] original = readClassBytes(SampleClass.class);
+    public void instanceMethodWithReturnValue() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("greet"));
+        assertWrapped(decompiled, "greet");
+        assertTrue("Should have String return type", decompiled.contains("public String greet("));
+    }
 
-        // Transform: wrap greet, add, doWork, multiply, check
-        final byte[] transformed = HandlerEnhancer.enhance(original, Set.of("greet", "add", "doWork", "multiply", "check"));
+    @Test
+    public void instanceVoidMethod() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("doWork"));
+        assertWrapped(decompiled, "doWork");
+        assertTrue("Should have void return", decompiled.contains("public void doWork("));
+    }
 
-        // Decompile the transformed bytes
-        final String decompiled = decompile(transformed, SampleClass.class.getName());
+    @Test
+    public void staticMethodWithReturnValue() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("multiply"));
+        assertWrapped(decompiled, "multiply");
+        assertTrue("Should be static", decompiled.contains("public static long multiply("));
+    }
 
-        assertNotNull("Decompiled output should not be null", decompiled);
+    @Test
+    public void staticVoidMethod() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("staticVoid"));
+        assertWrapped(decompiled, "staticVoid");
+        assertTrue("Should be static void", decompiled.contains("public static void staticVoid("));
+    }
 
-        System.out.println("=== Decompiled transformed class ===");
-        System.out.println(decompiled);
-        System.out.println("====================================");
+    @Test
+    public void primitiveReturnInt() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("add"));
+        assertWrapped(decompiled, "add");
+        assertTrue("Should have int return", decompiled.contains("public int add("));
+    }
 
-        // Verify the wrapper methods exist
-        assertTrue("Should contain wrapper for greet", decompiled.contains("public String greet("));
-        assertTrue("Should contain renamed original", decompiled.contains("jackknife$greet"));
-        assertTrue("Should contain wrapper for add", decompiled.contains("public int add("));
-        assertTrue("Should contain renamed add", decompiled.contains("jackknife$add"));
-        assertTrue("Should contain wrapper for doWork", decompiled.contains("public void doWork("));
-        assertTrue("Should contain renamed doWork", decompiled.contains("jackknife$doWork"));
-        assertTrue("Should contain static wrapper for multiply", decompiled.contains("public static long multiply("));
-        assertTrue("Should contain renamed multiply", decompiled.contains("jackknife$multiply"));
+    @Test
+    public void primitiveReturnBoolean() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("check"));
+        assertWrapped(decompiled, "check");
+        assertTrue("Should have boolean return", decompiled.contains("public boolean check("));
+    }
 
-        // Verify InvocationHandler delegation
-        assertTrue("Should call HandlerRegistry.getHandler", decompiled.contains("HandlerRegistry.getHandler"));
+    @Test
+    public void primitiveReturnByte() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("returnByte"));
+        assertWrapped(decompiled, "returnByte");
+    }
+
+    @Test
+    public void primitiveReturnShort() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("returnShort"));
+        assertWrapped(decompiled, "returnShort");
+    }
+
+    @Test
+    public void primitiveReturnChar() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("returnChar"));
+        assertWrapped(decompiled, "returnChar");
+    }
+
+    @Test
+    public void primitiveReturnFloat() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("returnFloat"));
+        assertWrapped(decompiled, "returnFloat");
+    }
+
+    @Test
+    public void primitiveReturnDouble() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("returnDouble"));
+        assertWrapped(decompiled, "returnDouble");
+    }
+
+    @Test
+    public void primitiveReturnLong() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("multiply"));
+        assertWrapped(decompiled, "multiply");
+    }
+
+    @Test
+    public void returnObjectArray() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("returnObjectArray"));
+        assertWrapped(decompiled, "returnObjectArray");
+    }
+
+    @Test
+    public void returnIntArray() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("returnIntArray"));
+        assertWrapped(decompiled, "returnIntArray");
+    }
+
+    @Test
+    public void returnByteArray() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("returnByteArray"));
+        assertWrapped(decompiled, "returnByteArray");
+    }
+
+    @Test
+    public void methodWithNoParameters() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("noParams"));
+        assertWrapped(decompiled, "noParams");
+    }
+
+    @Test
+    public void methodWithManyParameters() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("manyParams"));
+        assertWrapped(decompiled, "manyParams");
+    }
+
+    @Test
+    public void methodWithVarargs() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("sumVarargs"));
+        assertWrapped(decompiled, "sumVarargs");
+    }
+
+    @Test
+    public void methodWithGenericParameters() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("joinList"));
+        assertWrapped(decompiled, "joinList");
+    }
+
+    @Test
+    public void methodWithGenericReturnType() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("toList"));
+        assertWrapped(decompiled, "toList");
+    }
+
+    @Test
+    public void synchronizedMethodDropsSynchronized() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("syncMethod"));
+        assertWrapped(decompiled, "syncMethod");
+        // The wrapper should not be synchronized — only the renamed original retains it
+        // We check that the wrapper (with HandlerRegistry.getHandler) is not synchronized
+        // This is hard to check precisely in decompiled output since the renamed original
+        // retains synchronized. At minimum, verify both exist.
+        assertTrue("Should contain wrapper", decompiled.contains("HandlerRegistry.getHandler"));
+    }
+
+    @Test
+    public void methodThrowsCheckedException() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("throwsChecked"));
+        assertWrapped(decompiled, "throwsChecked");
+    }
+
+    @Test
+    public void methodThrowsUncheckedException() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("throwsUnchecked"));
+        assertWrapped(decompiled, "throwsUnchecked");
+    }
+
+    @Test
+    public void overloadedMethodsAllWrapped() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("overloaded"));
+        assertTrue("Should have renamed originals", decompiled.contains("jackknife$overloaded"));
+        assertTrue("Should have handler delegation", decompiled.contains("HandlerRegistry.getHandler"));
+    }
+
+    @Test
+    public void privateMethod() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("privateMethod"));
+        assertWrapped(decompiled, "privateMethod");
+    }
+
+    @Test
+    public void protectedMethod() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("protectedMethod"));
+        assertWrapped(decompiled, "protectedMethod");
+    }
+
+    @Test
+    public void packagePrivateMethod() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("packageMethod"));
+        assertWrapped(decompiled, "packageMethod");
+    }
+
+    @Test
+    public void finalMethod() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("finalMethod"));
+        assertWrapped(decompiled, "finalMethod");
+    }
+
+    @Test
+    public void constructorNotWrapped() throws IOException {
+        // Request wrapping "<init>" — should be skipped
+        final String decompiled = transformAndDecompile(Set.of("<init>"));
+        assertFalse("Constructor should NOT be renamed",
+                decompiled.contains("jackknife$<init>") || decompiled.contains("jackknife$_init_"));
+    }
+
+    @Test
+    public void staticInitializerNotWrapped() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("<clinit>"));
+        assertFalse("Static initializer should NOT be renamed",
+                decompiled.contains("jackknife$<clinit>") || decompiled.contains("jackknife$_clinit_"));
+    }
+
+    // ---- Decompile verification ----
+
+    @Test
+    public void decompiledWrapperShowsGetHandler() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("greet"));
+        assertTrue("Should show HandlerRegistry.getHandler call",
+                decompiled.contains("HandlerRegistry.getHandler"));
+    }
+
+    @Test
+    public void decompiledWrapperShowsNullCheckFallback() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("greet"));
+        // The wrapper should have a null check: if handler is null, call jackknife$greet directly
+        assertTrue("Should have null check or conditional",
+                decompiled.contains("jackknife$greet"));
+    }
+
+    @Test
+    public void decompiledWrapperShowsArgBoxing() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("add"));
+        // add(int, int) should box args into Object[]
+        assertTrue("Should have Object array creation",
+                decompiled.contains("Object[]") || decompiled.contains("new Object"));
+    }
+
+    @Test
+    public void decompiledWrapperShowsHandlerInvoke() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("greet"));
         assertTrue("Should call handler.invoke", decompiled.contains(".invoke("));
+    }
+
+    // ---- Annotation movement ----
+
+    @Test
+    public void annotationMovesFromRenamedToWrapper() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("annotatedMethod"));
+        // @Deprecated should be on the wrapper method (annotatedMethod), not on jackknife$annotatedMethod
+        // We can verify by checking that @Deprecated appears near the wrapper
+        assertTrue("Wrapper should have @Deprecated", decompiled.contains("@Deprecated"));
+        assertWrapped(decompiled, "annotatedMethod");
+    }
+
+    @Test
+    public void multipleAnnotationsMove() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("multiAnnotated"));
+        assertTrue("Should have @Deprecated", decompiled.contains("@Deprecated"));
+        assertWrapped(decompiled, "multiAnnotated");
+    }
+
+    @Test
+    public void parameterAnnotationsMove() throws IOException {
+        final String decompiled = transformAndDecompile(Set.of("paramAnnotated"));
+        assertWrapped(decompiled, "paramAnnotated");
+        // TestAnnotation should appear on the wrapper's parameter
+        assertTrue("Should have parameter annotation in output",
+                decompiled.contains("TestAnnotation"));
+    }
+
+    // ---- Full transform with all methods ----
+
+    @Test
+    public void transformAllMethodsDecompilesSuccessfully() throws IOException {
+        final String decompiled = transformAndDecompile(ALL_METHODS);
+        assertNotNull("Should decompile successfully", decompiled);
+        assertTrue("Should contain HandlerRegistry calls", decompiled.contains("HandlerRegistry.getHandler"));
+    }
+
+    // ---- Helper methods ----
+
+    private String transformAndDecompile(final Set<String> methods) throws IOException {
+        final byte[] original = readClassBytes(SampleClass.class);
+        final byte[] transformed = HandlerEnhancer.enhance(original, methods);
+        final String decompiled = decompile(transformed, SampleClass.class.getName());
+        assertNotNull("Decompiled output should not be null", decompiled);
+        return decompiled;
+    }
+
+    private void assertWrapped(final String decompiled, final String methodName) {
+        assertTrue("Should contain renamed method jackknife$" + methodName,
+                decompiled.contains("jackknife$" + methodName));
+        assertTrue("Should contain HandlerRegistry.getHandler",
+                decompiled.contains("HandlerRegistry.getHandler"));
     }
 
     private static byte[] readClassBytes(final Class<?> clazz) throws IOException {

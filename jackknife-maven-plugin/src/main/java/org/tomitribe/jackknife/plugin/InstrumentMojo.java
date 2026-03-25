@@ -23,7 +23,6 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
-import org.tomitribe.jackknife.index.IndexSearch;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -31,21 +30,19 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
  * Creates instrumentation config files from a method specification.
- * Uses the index to resolve method-name-only targets across all matching classes.
- * Writes Snitch-compatible properties files to .jackknife/instrument/.
+ * Searches manifests to find which jar contains the target class,
+ * then writes a properties file to .jackknife/instrument/.
  *
  * Usage:
- *   mvn jackknife:instrument -Dmethod="com.example.Foo.process(String, int)" -Dmode=debug
- *   mvn jackknife:instrument -Dmethod="retryRequest" -Dmode=timing
- *   mvn jackknife:instrument -Dmethod="retryRequest" -Dimplements=HttpRequestRetryHandler
+ *   mvn jackknife:instrument -Dmethod="org.tomitribe.util.Join.join" -Dmode=debug
+ *   mvn jackknife:instrument -Dmethod="join" -Dclass=org.tomitribe.util.Join -Dmode=timing
  */
 @Mojo(name = "instrument", requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME, aggregator = true)
 public class InstrumentMojo extends AbstractMojo {
@@ -65,21 +62,15 @@ public class InstrumentMojo extends AbstractMojo {
     @Parameter(property = "mode", defaultValue = "debug")
     private String mode;
 
-    @Parameter(property = "implements")
-    private String implementsFilter;
-
-    @Parameter(property = "package")
-    private String packageFilter;
-
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         final File rootDir = new File(executionRootDirectory);
         final File jackknife = new File(rootDir, ".jackknife");
-        final File indexDir = new File(jackknife, "index");
+        final File manifestDir = new File(jackknife, "manifest");
         final File instrumentDir = new File(jackknife, "instrument");
 
-        if (!indexDir.exists()) {
-            throw new MojoFailureException("Index not found. Run 'mvn jackknife:index' first.");
+        if (!manifestDir.exists()) {
+            throw new MojoFailureException("Manifests not found. Run 'mvn jackknife:index' first.");
         }
 
         // Parse the method specification
@@ -88,64 +79,45 @@ public class InstrumentMojo extends AbstractMojo {
             throw new MojoFailureException("Could not parse method specification: " + method);
         }
 
-        getLog().info("Searching for: " + parsed.getMethodName()
-                + (parsed.hasClass() ? " in " + parsed.getClassName() : " (all classes)")
-                + (implementsFilter != null ? " implements " + implementsFilter : "")
-                + (packageFilter != null ? " in package " + packageFilter : ""));
-
-        // Search the index
-        final List<IndexSearch.Match> matches;
-        try {
-            matches = IndexSearch.search(indexDir, parsed, implementsFilter, packageFilter);
-        } catch (final IOException e) {
-            throw new MojoExecutionException("Failed to search index", e);
+        if (!parsed.hasClass()) {
+            throw new MojoFailureException("Class name required. Use -Dclass=com.example.Foo or include it in the method: "
+                    + "com.example.Foo." + parsed.getMethodName());
         }
 
-        if (matches.isEmpty()) {
-            throw new MojoFailureException("No matching methods found. Check the method name and ensure the index is up to date.");
+        final String className = parsed.getClassName();
+        final String methodName = parsed.getMethodName();
+
+        getLog().info("Instrumenting " + className + "." + methodName + " [" + mode + "]");
+
+        // Search manifests to find which jar contains this class
+        final List<ManifestMatch> manifestMatches = searchManifests(manifestDir, className);
+
+        if (manifestMatches.isEmpty()) {
+            throw new MojoFailureException("Class " + className + " not found in any manifest. "
+                    + "Run 'mvn jackknife:index' to rebuild.");
         }
 
-        // Group matches by artifact
-        final Map<String, Set<String>> linesByArtifact = new LinkedHashMap<>();
-        final Map<String, String> artifactGroupIds = new LinkedHashMap<>();
+        // Build the Snitch-format method string
+        final String snitchMethod = parsed.toSnitchFormat();
+        final String prefix = "timing".equals(mode) ? "" : "@";
+        final String propertyLine = prefix + snitchMethod + " = " + snitchMethod;
 
-        for (final IndexSearch.Match match : matches) {
-            final String artifactFileName = match.getArtifactFileName();
-            final Set<String> lines = linesByArtifact.computeIfAbsent(artifactFileName, k -> new LinkedHashSet<>());
-
-            // Build the property line: key = value
-            // Key is the monitor name (with @ prefix for debug/tracking mode)
-            // Value is the Snitch-format method signature
-            final String snitchMethod = match.getSnitchMethod();
-            final String prefix = "timing".equals(mode) ? "" : "@";
-            lines.add(prefix + snitchMethod + " = " + snitchMethod);
-
-            // Track groupId from the index file path
-            final File indexFile = new File(match.getIndexFile());
-            final String groupId = indexFile.getParentFile().getName();
-            artifactGroupIds.put(artifactFileName, groupId);
-        }
-
-        // Write properties files
+        // Write properties files for each matching artifact
         int filesWritten = 0;
-        for (final Map.Entry<String, Set<String>> entry : linesByArtifact.entrySet()) {
-            final String artifactFileName = entry.getKey();
-            final Set<String> newLines = entry.getValue();
-            final String groupId = artifactGroupIds.get(artifactFileName);
-
-            final File groupDir = new File(instrumentDir, groupId);
+        for (final ManifestMatch match : manifestMatches) {
+            final File groupDir = new File(instrumentDir, match.groupId);
             groupDir.mkdirs();
 
-            final File propsFile = new File(groupDir, artifactFileName + ".properties");
+            final File propsFile = new File(groupDir, match.artifactFileName + ".properties");
 
-            // Read existing lines if file exists
-            final Set<String> existingLines = new LinkedHashSet<>();
+            // Read existing lines
+            final Set<String> lines = new LinkedHashSet<>();
             if (propsFile.exists()) {
                 try (final BufferedReader reader = new BufferedReader(new FileReader(propsFile))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
                         if (!line.startsWith("#") && !line.isBlank()) {
-                            existingLines.add(line);
+                            lines.add(line);
                         }
                     }
                 } catch (final IOException e) {
@@ -153,32 +125,69 @@ public class InstrumentMojo extends AbstractMojo {
                 }
             }
 
-            existingLines.addAll(newLines);
+            lines.add(propertyLine);
 
             try (final PrintWriter out = new PrintWriter(new FileWriter(propsFile))) {
                 out.println("# Jackknife instrumentation config");
                 out.println("# Mode: " + mode);
-                out.println("# Generated by: mvn jackknife:instrument -Dmethod=\"" + method + "\" -Dmode=" + mode);
                 out.println();
-
-                for (final String line : existingLines) {
+                for (final String line : lines) {
                     out.println(line);
                 }
-
                 filesWritten++;
             } catch (final IOException e) {
-                throw new MojoExecutionException("Failed to write properties file: " + propsFile, e);
+                throw new MojoExecutionException("Failed to write: " + propsFile, e);
+            }
+
+            getLog().info("  " + match.groupId + ":" + match.artifactFileName);
+        }
+
+        getLog().info("");
+        getLog().info("Wrote " + filesWritten + " instrumentation config(s) to .jackknife/instrument/");
+        getLog().info("Next build will apply instrumentation automatically.");
+    }
+
+    private List<ManifestMatch> searchManifests(final File manifestDir, final String className) {
+        final List<ManifestMatch> matches = new ArrayList<>();
+
+        final File[] groupDirs = manifestDir.listFiles(File::isDirectory);
+        if (groupDirs == null) {
+            return matches;
+        }
+
+        for (final File groupDir : groupDirs) {
+            final File[] manifestFiles = groupDir.listFiles(
+                    (final File dir, final String name) -> name.endsWith(".manifest"));
+            if (manifestFiles == null) {
+                continue;
+            }
+
+            for (final File manifestFile : manifestFiles) {
+                if (containsClass(manifestFile, className)) {
+                    final String artifactFileName = manifestFile.getName()
+                            .replace(".manifest", "");
+                    matches.add(new ManifestMatch(groupDir.getName(), artifactFileName));
+                }
             }
         }
 
-        // Print summary
-        getLog().info("");
-        getLog().info("Instrumented " + matches.size() + " method(s) across " + filesWritten + " artifact(s):");
-        for (final IndexSearch.Match match : matches) {
-            getLog().info("  " + match.getSnitchMethod() + " [" + mode + "]");
+        return matches;
+    }
+
+    private boolean containsClass(final File manifestFile, final String className) {
+        try (final BufferedReader reader = new BufferedReader(new FileReader(manifestFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.equals(className)) {
+                    return true;
+                }
+            }
+        } catch (final IOException e) {
+            // skip
         }
-        getLog().info("");
-        getLog().info("Properties written to .jackknife/instrument/");
-        getLog().info("Next build will apply instrumentation automatically.");
+        return false;
+    }
+
+    private record ManifestMatch(String groupId, String artifactFileName) {
     }
 }

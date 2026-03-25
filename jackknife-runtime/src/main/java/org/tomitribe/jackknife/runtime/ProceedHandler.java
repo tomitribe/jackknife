@@ -34,17 +34,30 @@ public final class ProceedHandler implements InvocationHandler {
     private static final String PREFIX = "jackknife$";
     private final ConcurrentMap<String, Method> methodCache = new ConcurrentHashMap<>();
 
+    private final String targetClassName;
     private final String methodName;
     private final Class<?>[] parameterTypes;
 
     public ProceedHandler(final String methodName, final Class<?>[] parameterTypes) {
+        this(null, methodName, parameterTypes);
+    }
+
+    public ProceedHandler(final String targetClassName, final String methodName, final Class<?>[] parameterTypes) {
+        this.targetClassName = targetClassName;
         this.methodName = methodName;
         this.parameterTypes = parameterTypes;
     }
 
     @Override
     public Object invoke(final Object proxy, final Method method, final Object[] args) throws Throwable {
-        final Class<?> targetClass = proxy.getClass();
+        final Class<?> targetClass;
+        if (proxy != null) {
+            targetClass = proxy.getClass();
+        } else if (targetClassName != null) {
+            targetClass = Class.forName(targetClassName, true, Thread.currentThread().getContextClassLoader());
+        } else {
+            throw new IllegalStateException("Cannot determine target class: proxy is null and no targetClassName configured");
+        }
         final String cacheKey = targetClass.getName() + "." + methodName;
 
         final Method renamed = methodCache.computeIfAbsent(cacheKey, k -> {

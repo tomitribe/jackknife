@@ -51,28 +51,28 @@ public final class HandlerRegistry {
      * Called by generated wrapper bytecode.
      * Auto-initializes from classpath config on first call.
      */
-    public static InvocationHandler getHandler(final String className, final String methodName, final String descriptor) {
+    public static InvocationHandler getHandler(final String className, final String methodName) {
         if (INITIALIZED.compareAndSet(false, true)) {
             autoDiscover();
         }
-        final String key = key(className, methodName, descriptor);
+        final String key = key(className, methodName);
         return HANDLERS.get(key);
     }
 
     /**
      * Register a handler for a specific method.
      */
-    public static void register(final String className, final String methodName, final String descriptor,
+    public static void register(final String className, final String methodName,
                                 final InvocationHandler handler) {
-        final String key = key(className, methodName, descriptor);
+        final String key = key(className, methodName);
         HANDLERS.put(key, handler);
     }
 
     /**
      * Remove a handler for a specific method.
      */
-    public static void unregister(final String className, final String methodName, final String descriptor) {
-        final String key = key(className, methodName, descriptor);
+    public static void unregister(final String className, final String methodName) {
+        final String key = key(className, methodName);
         HANDLERS.remove(key);
     }
 
@@ -121,24 +121,23 @@ public final class HandlerRegistry {
                     continue;
                 }
 
-                // Format: mode className methodName descriptor [paramTypes]
-                final String[] parts = line.split("\\s+", 5);
-                if (parts.length < 4) {
+                // Format: mode className methodName [paramTypes]
+                final String[] parts = line.split("\\s+", 4);
+                if (parts.length < 3) {
                     continue;
                 }
 
                 final String mode = parts[0];
                 final String className = parts[1];
                 final String methodName = parts[2];
-                final String descriptor = parts[3];
-                final String paramTypesStr = parts.length > 4 ? parts[4] : "";
+                final String paramTypesStr = parts.length > 3 ? parts[3] : "";
 
                 final Class<?>[] paramTypes = parseParamTypes(paramTypesStr);
 
-                final ProceedHandler proceed = new ProceedHandler(methodName, paramTypes);
+                final ProceedHandler proceed = new ProceedHandler(className, methodName, paramTypes);
                 final InvocationHandler handler = buildChain(mode, proceed);
 
-                register(className, methodName, descriptor, handler);
+                register(className, methodName, handler);
 
                 System.out.println("JACKKNIFE: Registered " + mode + " handler for "
                         + className + "." + methodName);
@@ -199,7 +198,7 @@ public final class HandlerRegistry {
         };
     }
 
-    private static String key(final String className, final String methodName, final String descriptor) {
-        return className + "." + methodName + descriptor;
+    private static String key(final String className, final String methodName) {
+        return className + "." + methodName;
     }
 }

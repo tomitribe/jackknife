@@ -301,59 +301,18 @@ public class ProcessMojo extends AbstractMojo {
                 final String className = fullName.substring(0, lastDot);
                 final String methodName = fullName.substring(lastDot + 1);
 
-                // Parse parameter types from the descriptor
+                // Parse parameter types
                 final String argsStr = parenStart >= 0 && methodSpec.contains(")")
                         ? methodSpec.substring(parenStart + 1, methodSpec.lastIndexOf(')'))
                         : "";
 
-                // Build ASM descriptor from Java type names
-                final String descriptor = buildDescriptor(argsStr);
-
-                config.add(className, methodName, mode, descriptor, argsStr);
+                config.add(className, methodName, mode, argsStr);
             }
         } catch (final IOException e) {
             // skip
         }
 
         return config;
-    }
-
-    /**
-     * Build an ASM method descriptor from comma-separated Java type names.
-     * Approximate — uses void return type since we match by name+args.
-     */
-    private static String buildDescriptor(final String argsStr) {
-        if (argsStr.isEmpty()) {
-            return "()V";
-        }
-
-        final StringBuilder desc = new StringBuilder("(");
-        for (final String arg : argsStr.split(",")) {
-            final String typeName = arg.trim();
-            desc.append(toDescriptor(typeName));
-        }
-        desc.append(")V"); // return type doesn't matter for matching
-        return desc.toString();
-    }
-
-    private static String toDescriptor(final String typeName) {
-        return switch (typeName) {
-            case "boolean" -> "Z";
-            case "byte" -> "B";
-            case "char" -> "C";
-            case "short" -> "S";
-            case "int" -> "I";
-            case "long" -> "J";
-            case "float" -> "F";
-            case "double" -> "D";
-            case "void" -> "V";
-            default -> {
-                if (typeName.endsWith("[]")) {
-                    yield "[" + toDescriptor(typeName.substring(0, typeName.length() - 2));
-                }
-                yield "L" + typeName.replace('.', '/') + ";";
-            }
-        };
     }
 
     /**
@@ -367,9 +326,9 @@ public class ProcessMojo extends AbstractMojo {
         private final List<HandlerEntry> entries = new ArrayList<>();
 
         void add(final String className, final String methodName, final String mode,
-                 final String descriptor, final String paramTypes) {
+                 final String paramTypes) {
             methodsByClass.computeIfAbsent(className, k -> new HashSet<>()).add(methodName);
-            entries.add(new HandlerEntry(mode, className, methodName, descriptor, paramTypes));
+            entries.add(new HandlerEntry(mode, className, methodName, paramTypes));
         }
 
         boolean isEmpty() {
@@ -387,12 +346,11 @@ public class ProcessMojo extends AbstractMojo {
         String toHandlerConfig() {
             final StringBuilder sb = new StringBuilder();
             sb.append("# Jackknife handler configuration — auto-generated\n");
-            sb.append("# Format: mode className methodName descriptor paramTypes\n");
+            sb.append("# Format: mode className methodName [paramTypes]\n");
             for (final HandlerEntry entry : entries) {
                 sb.append(entry.mode).append(" ")
                         .append(entry.className).append(" ")
-                        .append(entry.methodName).append(" ")
-                        .append(entry.descriptor);
+                        .append(entry.methodName);
                 if (!entry.paramTypes.isEmpty()) {
                     sb.append(" ").append(entry.paramTypes);
                 }
@@ -401,8 +359,7 @@ public class ProcessMojo extends AbstractMojo {
             return sb.toString();
         }
 
-        record HandlerEntry(String mode, String className, String methodName,
-                            String descriptor, String paramTypes) {
+        record HandlerEntry(String mode, String className, String methodName, String paramTypes) {
         }
     }
 }

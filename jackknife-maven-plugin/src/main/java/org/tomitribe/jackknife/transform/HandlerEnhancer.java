@@ -127,12 +127,11 @@ public final class HandlerEnhancer {
             final Type returnType = Type.getReturnType(descriptor);
             final boolean isStatic = (access & Opcodes.ACC_STATIC) != 0;
 
-            // HandlerRegistry.getHandler(className, methodName, descriptor)
+            // HandlerRegistry.getHandler(className, methodName)
             mv.visitLdcInsn(classInternalName.replace('/', '.'));
             mv.visitLdcInsn(name);
-            mv.visitLdcInsn(descriptor);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC, REGISTRY_CLASS, "getHandler",
-                    "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/reflect/InvocationHandler;",
+                    "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/reflect/InvocationHandler;",
                     false);
 
             // Store handler in local var

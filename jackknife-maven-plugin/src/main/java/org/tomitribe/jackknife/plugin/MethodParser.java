@@ -46,6 +46,9 @@ public final class MethodParser {
 
         String cleaned = input.trim();
 
+        // Strip annotation prefixes like "@javax.inject.Inject " (before modifiers)
+        cleaned = cleaned.replaceAll("^@\\S+\\s+", "");
+
         // Strip leading modifiers: public, private, protected, static, final, synchronized, native, abstract
         cleaned = cleaned.replaceAll("^(public|private|protected|static|final|synchronized|native|abstract|method)\\s+", "");
         // Repeat to handle multiple modifiers like "public static method"
@@ -55,9 +58,6 @@ public final class MethodParser {
 
         // Strip return type: " : something" at the end
         cleaned = cleaned.replaceAll("\\s*:\\s*\\S+$", "");
-
-        // Strip annotation prefixes like "@javax.inject.Inject "
-        cleaned = cleaned.replaceAll("^@\\S+\\s+", "");
 
         // Now we should have either:
         //   com.example.Foo.method(args)

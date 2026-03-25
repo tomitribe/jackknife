@@ -53,8 +53,9 @@ public final class DebugHandler implements InvocationHandler {
 
     @Override
     public Object invoke(final Object proxy, final Method method, final Object[] args) throws Throwable {
-        final String methodName = proxy != null ? proxy.getClass().getName() + "." : "";
-        final String label = methodName + (method != null ? method.getName() : "unknown");
+        final String label = proxy != null
+                ? proxy.getClass().getName() + "." + (method != null ? method.getName() : "unknown")
+                : (method != null ? method.getName() : "unknown");
 
         // Log entry
         final String argsStr = formatArgs(args);
