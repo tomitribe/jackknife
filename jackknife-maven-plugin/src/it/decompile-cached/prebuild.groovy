@@ -18,8 +18,12 @@
 // Run decompile once so the cache is warm for the main build.
 
 def mvnCmd = System.getProperty('os.name').toLowerCase().contains('win') ? 'mvn.cmd' : 'mvn'
-def clonedSettings = new File(basedir.parentFile, 'settings.xml')
-def settingsArg = clonedSettings.exists() ? ['-s', clonedSettings.absolutePath] : []
+
+// Generate a settings.xml pointing to the IT local repo
+def localRepo = new File(basedir.parentFile.parentFile, 'local-repo')
+def settingsFile = new File(basedir, 'settings.xml')
+settingsFile.text = "<settings><localRepository>${localRepo.absolutePath}</localRepository></settings>"
+def settingsArg = ['-s', settingsFile.absolutePath]
 
 def cmd = [mvnCmd] + settingsArg + ['jackknife:decompile', '-Dclass=org.tomitribe.jackknife.runtime.DebugHandler', '-B']
 println "Prebuild: running ${cmd.join(' ')}"

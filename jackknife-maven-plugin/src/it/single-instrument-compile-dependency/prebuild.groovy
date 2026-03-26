@@ -20,8 +20,12 @@
 // 2. Run jackknife:instrument to instrument Join.join with debug mode
 
 def mvnCmd = System.getProperty('os.name').toLowerCase().contains('win') ? 'mvn.cmd' : 'mvn'
-def clonedSettings = new File(basedir.parentFile, 'settings.xml')
-def settingsArg = clonedSettings.exists() ? ['-s', clonedSettings.absolutePath] : []
+
+// Generate a settings.xml pointing to the IT local repo
+def localRepo = new File(basedir.parentFile.parentFile, 'local-repo')
+def settingsFile = new File(basedir, 'settings.xml')
+settingsFile.text = "<settings><localRepository>${localRepo.absolutePath}</localRepository></settings>"
+def settingsArg = ['-s', settingsFile.absolutePath]
 
 // Step 1: index
 def indexCmd = [mvnCmd] + settingsArg + ['jackknife:index', '-B']

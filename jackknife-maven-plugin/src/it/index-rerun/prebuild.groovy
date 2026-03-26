@@ -16,14 +16,14 @@
  */
 
 // Run jackknife:index once before the main build so we can test skip-on-rerun.
-// We invoke Maven programmatically via ProcessBuilder.
 
 def mvnCmd = System.getProperty('os.name').toLowerCase().contains('win') ? 'mvn.cmd' : 'mvn'
-def settingsFile = new File(basedir, '../../local-repo').parentFile.parentFile.absolutePath + '/target/it/settings.xml'
 
-// Check if there's a settings.xml in the cloned location
-def clonedSettings = new File(basedir.parentFile, 'settings.xml')
-def settingsArg = clonedSettings.exists() ? ['-s', clonedSettings.absolutePath] : []
+// Generate a settings.xml pointing to the IT local repo
+def localRepo = new File(basedir.parentFile.parentFile, 'local-repo')
+def settingsFile = new File(basedir, 'settings.xml')
+settingsFile.text = "<settings><localRepository>${localRepo.absolutePath}</localRepository></settings>"
+def settingsArg = ['-s', settingsFile.absolutePath]
 
 def cmd = [mvnCmd] + settingsArg + ['jackknife:index', '-B']
 println "Prebuild: running ${cmd.join(' ')}"
