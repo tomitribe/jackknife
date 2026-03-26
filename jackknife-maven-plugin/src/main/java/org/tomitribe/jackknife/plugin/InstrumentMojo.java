@@ -34,15 +34,18 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
- * Creates instrumentation config files from a method specification.
- * Searches manifests to find which jar contains the target class,
- * then writes a properties file to .jackknife/instrument/.
+ * Creates instrumentation config files from a class and method specification.
+ * Searches manifests to find which jar contains the target class(es),
+ * then writes properties files to .jackknife/instrument/.
  *
  * Usage:
- *   mvn jackknife:instrument -Dmethod="org.tomitribe.util.Join.join" -Dmode=debug
- *   mvn jackknife:instrument -Dmethod="join" -Dclass=org.tomitribe.util.Join -Dmode=timing
+ *   mvn jackknife:instrument -Dclass=org.tomitribe.util.Join -Dmethod=join
+ *   mvn jackknife:instrument -Dclass="org.junit.**" -Dmethod=assertEquals
+ *   mvn jackknife:instrument -Dclass=org.junit.Assert
+ *   mvn jackknife:instrument -Dmethod="org.tomitribe.util.Join.join(java.lang.String,java.util.Collection)"
  */
 @Mojo(name = "instrument", requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME, aggregator = true)
 public class InstrumentMojo extends AbstractMojo {
@@ -53,7 +56,7 @@ public class InstrumentMojo extends AbstractMojo {
     @Parameter(defaultValue = "${session.executionRootDirectory}", readonly = true)
     private String executionRootDirectory;
 
-    @Parameter(property = "method", required = true)
+    @Parameter(property = "method")
     private String method;
 
     @Parameter(property = "class")
@@ -69,58 +72,129 @@ public class InstrumentMojo extends AbstractMojo {
         final File manifestDir = new File(jackknife, "manifest");
         final File instrumentDir = new File(jackknife, "instrument");
 
-        if (!manifestDir.exists()) {
-            throw new MojoFailureException("Manifests not found. Run:  mvn jackknife:index");
-        }
+        // Parse the method specification if provided
+        final String className;
+        final String methodSpec; // methodName, or methodName(args), or *
 
-        // Parse the method specification
-        final MethodParser.ParsedMethod parsed = MethodParser.parse(method, targetClass);
-        if (parsed == null) {
-            throw new MojoFailureException("Could not parse method specification: " + method);
-        }
-
-        if (!parsed.hasClass()) {
-            throw new MojoFailureException("Class name required. Use -Dclass=com.example.Foo or include it in the method: "
-                    + "com.example.Foo." + parsed.getMethodName());
-        }
-
-        final String className = parsed.getClassName();
-        final String methodName = parsed.getMethodName();
-
-        getLog().info("Instrumenting " + className + "." + methodName + " [" + mode + "]");
-
-        // Build the Snitch-format method string
-        final String snitchMethod = parsed.toSnitchFormat();
-        final String prefix = "timing".equals(mode) ? "" : "@";
-        final String propertyLine = prefix + snitchMethod + " = " + snitchMethod;
-
-        // Search manifests to find which jar contains this class
-        final List<ManifestMatch> manifestMatches = searchManifests(manifestDir, className);
-
-        if (!manifestMatches.isEmpty()) {
-            // Dependency jar — write config per matching artifact
-            int filesWritten = 0;
-            for (final ManifestMatch match : manifestMatches) {
-                filesWritten += writeInstrumentConfig(instrumentDir, match.groupId,
-                        match.artifactFileName + ".properties", propertyLine);
-                getLog().info("  " + match.groupId + ":" + match.artifactFileName);
+        if (method != null && !method.isBlank()) {
+            final MethodParser.ParsedMethod parsed = MethodParser.parse(method, targetClass);
+            if (parsed == null) {
+                throw new MojoFailureException("Could not parse method specification: " + method);
             }
-            getLog().info("");
-            getLog().info("Wrote " + filesWritten + " instrumentation config(s) to .jackknife/instrument/");
-        } else if (isProjectClass(rootDir, className)) {
-            // Project code — write config to _project/
-            writeInstrumentConfig(instrumentDir, "_project", "project.properties", propertyLine);
-            getLog().info("  project code: " + className);
-            getLog().info("");
-            getLog().info("Wrote instrumentation config to .jackknife/instrument/_project/");
+
+            if (!parsed.hasClass() && (targetClass == null || targetClass.isBlank())) {
+                throw new MojoFailureException("Class name required. Use -Dclass=com.example.Foo or include it in -Dmethod");
+            }
+
+            className = parsed.hasClass() ? parsed.getClassName() : targetClass;
+            // Preserve args if specified: "join(String,Collection)" vs just "join"
+            if (parsed.hasArgs()) {
+                methodSpec = parsed.getMethodName() + "(" + String.join(",", parsed.getArgTypes()) + ")";
+            } else {
+                methodSpec = parsed.getMethodName();
+            }
+        } else if (targetClass != null && !targetClass.isBlank()) {
+            // -Dclass only, no -Dmethod — instrument all methods
+            className = targetClass;
+            methodSpec = "*";
         } else {
-            throw new MojoFailureException("Class " + className + " not found in any manifest or project source.\n"
-                    + "To rebuild manifests:           mvn jackknife:index\n"
-                    + "To search ~/.m2/repository:     mvn jackknife:index -Dclass=" + className);
+            throw new MojoFailureException("At least -Dclass is required.\n"
+                    + "Examples:\n"
+                    + "  mvn jackknife:instrument -Dclass=com.example.Foo -Dmethod=bar\n"
+                    + "  mvn jackknife:instrument -Dclass=com.example.Foo\n"
+                    + "  mvn jackknife:instrument -Dclass=\"org.junit.**\" -Dmethod=assertEquals");
+        }
+
+        // Check if class pattern contains wildcards
+        final boolean isWildcard = className.contains("*");
+
+        if (isWildcard) {
+            if (!manifestDir.exists()) {
+                throw new MojoFailureException("Manifests not found. Run:  mvn jackknife:index");
+            }
+            executeWildcard(manifestDir, instrumentDir, rootDir, className, methodSpec);
+        } else {
+            executeSingle(manifestDir, instrumentDir, rootDir, className, methodSpec);
         }
 
         getLog().info("Next build will apply instrumentation automatically.");
     }
+
+    private void executeSingle(final File manifestDir, final File instrumentDir, final File rootDir,
+                               final String className, final String methodSpec) throws MojoExecutionException, MojoFailureException {
+        final String displayMethod = "*".equals(methodSpec) ? className + " (all methods)" : className + "." + methodSpec;
+        getLog().info("Instrumenting " + displayMethod + " [" + mode + "]");
+
+        final String propertyLine = buildPropertyLine(className, methodSpec);
+
+        if (manifestDir.exists()) {
+            final List<ManifestMatch> matches = searchManifests(manifestDir, className);
+            if (!matches.isEmpty()) {
+                int filesWritten = 0;
+                for (final ManifestMatch match : matches) {
+                    filesWritten += writeInstrumentConfig(instrumentDir, match.groupId,
+                            match.artifactFileName + ".properties", propertyLine);
+                    getLog().info("  " + match.groupId + ":" + match.artifactFileName);
+                }
+                getLog().info("Wrote " + filesWritten + " instrumentation config(s) to .jackknife/instrument/");
+                return;
+            }
+        }
+
+        if (isProjectClass(rootDir, className)) {
+            writeInstrumentConfig(instrumentDir, "_project", "project.properties", propertyLine);
+            getLog().info("  project code: " + className);
+            getLog().info("Wrote instrumentation config to .jackknife/instrument/_project/");
+            return;
+        }
+
+        throw new MojoFailureException("Class " + className + " not found in any manifest or project source.\n"
+                + "To rebuild manifests:           mvn jackknife:index\n"
+                + "To search ~/.m2/repository:     mvn jackknife:index -Dclass=" + className);
+    }
+
+    private void executeWildcard(final File manifestDir, final File instrumentDir, final File rootDir,
+                                 final String classPattern, final String methodSpec) throws MojoExecutionException {
+        final String displayMethod = "*".equals(methodSpec) ? " (all methods)" : "." + methodSpec;
+        getLog().info("Instrumenting " + classPattern + displayMethod + " [" + mode + "]");
+
+        final Pattern pattern = classGlobToPattern(classPattern);
+        final List<ClassMatch> classMatches = searchManifestsWithPattern(manifestDir, pattern);
+
+        // Also check project source
+        final List<String> projectClasses = searchProjectSourceWithPattern(rootDir, pattern);
+
+        if (classMatches.isEmpty() && projectClasses.isEmpty()) {
+            getLog().warn("No classes matching pattern: " + classPattern);
+            return;
+        }
+
+        // Write configs for dependency classes
+        int totalConfigs = 0;
+        for (final ClassMatch match : classMatches) {
+            final String propertyLine = buildPropertyLine(match.className, methodSpec);
+            writeInstrumentConfig(instrumentDir, match.groupId,
+                    match.artifactFileName + ".properties", propertyLine);
+            totalConfigs++;
+        }
+
+        // Write configs for project classes
+        for (final String projectClass : projectClasses) {
+            final String propertyLine = buildPropertyLine(projectClass, methodSpec);
+            writeInstrumentConfig(instrumentDir, "_project", "project.properties", propertyLine);
+            totalConfigs++;
+        }
+
+        getLog().info("Matched " + (classMatches.size() + projectClasses.size()) + " class(es), wrote " + totalConfigs + " config(s)");
+    }
+
+    private String buildPropertyLine(final String className, final String methodName) {
+        final String prefix = "timing".equals(mode) ? "" : "@";
+        final String spec = className + "." + methodName;
+        return prefix + spec + " = " + spec;
+    }
+
+    // ---- Manifest search ----
 
     private List<ManifestMatch> searchManifests(final File manifestDir, final String className) {
         final List<ManifestMatch> matches = new ArrayList<>();
@@ -139,14 +213,75 @@ public class InstrumentMojo extends AbstractMojo {
 
             for (final File manifestFile : manifestFiles) {
                 if (containsClass(manifestFile, className)) {
-                    final String artifactFileName = manifestFile.getName()
-                            .replace(".manifest", "");
+                    final String artifactFileName = manifestFile.getName().replace(".manifest", "");
                     matches.add(new ManifestMatch(groupDir.getName(), artifactFileName));
                 }
             }
         }
 
         return matches;
+    }
+
+    private List<ClassMatch> searchManifestsWithPattern(final File manifestDir, final Pattern pattern) {
+        final List<ClassMatch> matches = new ArrayList<>();
+
+        final File[] groupDirs = manifestDir.listFiles(File::isDirectory);
+        if (groupDirs == null) {
+            return matches;
+        }
+
+        for (final File groupDir : groupDirs) {
+            final File[] manifestFiles = groupDir.listFiles(
+                    (final File dir, final String name) -> name.endsWith(".manifest"));
+            if (manifestFiles == null) {
+                continue;
+            }
+
+            for (final File manifestFile : manifestFiles) {
+                final String artifactFileName = manifestFile.getName().replace(".manifest", "");
+                final List<String> matched = findMatchingClasses(manifestFile, pattern);
+                for (final String className : matched) {
+                    matches.add(new ClassMatch(groupDir.getName(), artifactFileName, className));
+                }
+            }
+        }
+
+        return matches;
+    }
+
+    private List<String> searchProjectSourceWithPattern(final File rootDir, final Pattern pattern) {
+        final List<String> matches = new ArrayList<>();
+        final String[] sourceRoots = {"src/main/java", "src/test/java"};
+
+        for (final String root : sourceRoots) {
+            final File sourceRoot = new File(rootDir, root);
+            if (!sourceRoot.exists()) {
+                continue;
+            }
+            collectMatchingSourceClasses(sourceRoot, sourceRoot, pattern, matches);
+        }
+
+        return matches;
+    }
+
+    private void collectMatchingSourceClasses(final File root, final File dir, final Pattern pattern,
+                                              final List<String> matches) {
+        final File[] files = dir.listFiles();
+        if (files == null) {
+            return;
+        }
+
+        for (final File file : files) {
+            if (file.isDirectory()) {
+                collectMatchingSourceClasses(root, file, pattern, matches);
+            } else if (file.getName().endsWith(".java")) {
+                final String relative = root.toPath().relativize(file.toPath()).toString();
+                final String className = relative.replace('/', '.').replace(".java", "");
+                if (pattern.matcher(className).matches()) {
+                    matches.add(className);
+                }
+            }
+        }
     }
 
     private boolean containsClass(final File manifestFile, final String className) {
@@ -163,6 +298,26 @@ public class InstrumentMojo extends AbstractMojo {
         return false;
     }
 
+    private List<String> findMatchingClasses(final File manifestFile, final Pattern pattern) {
+        final List<String> matches = new ArrayList<>();
+        try (final BufferedReader reader = new BufferedReader(new FileReader(manifestFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.startsWith("#")) {
+                    break; // resources section
+                }
+                if (!line.isBlank() && pattern.matcher(line).matches()) {
+                    matches.add(line);
+                }
+            }
+        } catch (final IOException e) {
+            // skip
+        }
+        return matches;
+    }
+
+    // ---- Config writing ----
+
     private int writeInstrumentConfig(final File instrumentDir, final String subDir,
                                        final String fileName, final String propertyLine)
             throws MojoExecutionException {
@@ -171,7 +326,6 @@ public class InstrumentMojo extends AbstractMojo {
 
         final File propsFile = new File(dir, fileName);
 
-        // Read existing lines
         final Set<String> lines = new LinkedHashSet<>();
         if (propsFile.exists()) {
             try (final BufferedReader reader = new BufferedReader(new FileReader(propsFile))) {
@@ -201,14 +355,11 @@ public class InstrumentMojo extends AbstractMojo {
         return 1;
     }
 
+    // ---- Utilities ----
+
     private static boolean isProjectClass(final File rootDir, final String className) {
         final String sourcePath = className.replace('.', '/') + ".java";
-
-        // Check common source roots
-        final String[] sourceRoots = {
-                "src/main/java",
-                "src/test/java"
-        };
+        final String[] sourceRoots = {"src/main/java", "src/test/java"};
 
         for (final String root : sourceRoots) {
             final File sourceFile = new File(rootDir, root + "/" + sourcePath);
@@ -219,6 +370,35 @@ public class InstrumentMojo extends AbstractMojo {
         return false;
     }
 
+    /**
+     * Convert a class name glob to a regex pattern.
+     * * matches one package level (no dots), ** matches any depth.
+     */
+    static Pattern classGlobToPattern(final String glob) {
+        final StringBuilder regex = new StringBuilder();
+        for (int i = 0; i < glob.length(); i++) {
+            final char c = glob.charAt(i);
+            if (c == '*') {
+                if (i + 1 < glob.length() && glob.charAt(i + 1) == '*') {
+                    regex.append(".*");
+                    i++;
+                } else {
+                    regex.append("[^.]*");
+                }
+            } else if (c == '?') {
+                regex.append("[^.]");
+            } else if (".()[]{}+^$|\\".indexOf(c) >= 0) {
+                regex.append('\\').append(c);
+            } else {
+                regex.append(c);
+            }
+        }
+        return Pattern.compile(regex.toString());
+    }
+
     private record ManifestMatch(String groupId, String artifactFileName) {
+    }
+
+    private record ClassMatch(String groupId, String artifactFileName, String className) {
     }
 }

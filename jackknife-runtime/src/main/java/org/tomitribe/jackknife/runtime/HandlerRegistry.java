@@ -55,8 +55,12 @@ public final class HandlerRegistry {
         if (INITIALIZED.compareAndSet(false, true)) {
             autoDiscover();
         }
-        final String key = key(className, methodName);
-        return HANDLERS.get(key);
+        final InvocationHandler handler = HANDLERS.get(key(className, methodName));
+        if (handler != null) {
+            return handler;
+        }
+        // Wildcard fallback: className.* matches all methods
+        return HANDLERS.get(key(className, "*"));
     }
 
     /**

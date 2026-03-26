@@ -28,7 +28,9 @@ import org.jetbrains.java.decompiler.api.Decompiler;
 import org.jetbrains.java.decompiler.main.extern.IFernflowerPreferences;
 import org.jetbrains.java.decompiler.main.extern.IResultSaver;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -46,7 +48,7 @@ import java.util.jar.Manifest;
  *
  * Usage: mvn jackknife:decompile -Dclass=com.example.MyClass
  */
-@Mojo(name = "decompile", requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME, aggregator = true)
+@Mojo(name = "decompile", requiresDependencyResolution = ResolutionScope.TEST, aggregator = true)
 public class DecompileMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
@@ -54,6 +56,9 @@ public class DecompileMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${session.executionRootDirectory}", readonly = true)
     private String executionRootDirectory;
+
+    @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
+    private String localRepository;
 
     @Parameter(property = "class", required = true)
     private String className;
@@ -64,25 +69,42 @@ public class DecompileMojo extends AbstractMojo {
         final File rootDir = new File(executionRootDirectory);
         final File jackknife = new File(rootDir, ".jackknife");
         final File sourceDir = new File(jackknife, "source");
+        final File manifestDir = new File(jackknife, "manifest");
 
-        // Find which jar contains this class
+        // Step 1: search manifests (works for both single and multi-module)
         File targetJar = null;
-        Artifact targetArtifact = null;
-        final Set<Artifact> artifacts = project.getArtifacts();
-        for (final Artifact artifact : artifacts) {
-            final File file = artifact.getFile();
-            if (file == null || !file.exists() || !file.getName().endsWith(".jar")) {
-                continue;
-            }
+        String groupId = null;
 
-            try (final java.util.jar.JarFile jar = new java.util.jar.JarFile(file)) {
-                if (jar.getEntry(classPath + ".class") != null) {
-                    targetJar = file;
-                    targetArtifact = artifact;
-                    break;
+        if (manifestDir.exists()) {
+            final ManifestResult result = findInManifests(manifestDir, className);
+            if (result != null) {
+                groupId = result.groupId;
+                // Resolve the jar file from the local repo
+                targetJar = resolveJarFromRepo(new File(localRepository), result.groupId, result.jarFileName);
+                if (targetJar == null) {
+                    // Try project artifacts as fallback
+                    targetJar = findJarInArtifacts(result.jarFileName);
                 }
-            } catch (final IOException e) {
-                // Skip unreadable jars
+            }
+        }
+
+        // Step 2: fall back to project artifacts (single-module, no index needed)
+        if (targetJar == null) {
+            final Set<Artifact> artifacts = project.getArtifacts();
+            for (final Artifact artifact : artifacts) {
+                final File file = artifact.getFile();
+                if (file == null || !file.exists() || !file.getName().endsWith(".jar")) {
+                    continue;
+                }
+                try (final java.util.jar.JarFile jar = new java.util.jar.JarFile(file)) {
+                    if (jar.getEntry(classPath + ".class") != null) {
+                        targetJar = file;
+                        groupId = artifact.getGroupId();
+                        break;
+                    }
+                } catch (final IOException e) {
+                    // Skip unreadable jars
+                }
             }
         }
 
@@ -92,7 +114,6 @@ public class DecompileMojo extends AbstractMojo {
                     + "To search ~/.m2/repository:     mvn jackknife:index -Dclass=" + className);
         }
 
-        final String groupId = targetArtifact.getGroupId();
         final String jarDirName = targetJar.getName().replace(".jar", "");
         final File jarSourceDir = new File(new File(sourceDir, groupId), jarDirName);
 
@@ -105,8 +126,7 @@ public class DecompileMojo extends AbstractMojo {
         }
 
         // Decompile the entire jar
-        getLog().info("Decompiling " + targetArtifact.getGroupId() + ":" + targetArtifact.getArtifactId()
-                + ":" + targetArtifact.getVersion() + " (" + targetJar.getName() + ")");
+        getLog().info("Decompiling " + groupId + ":" + targetJar.getName());
 
         jarSourceDir.mkdirs();
         final AtomicInteger count = new AtomicInteger(0);
@@ -215,5 +235,87 @@ public class DecompileMojo extends AbstractMojo {
         @Override
         public void closeArchive(final String path, final String archiveName) {
         }
+    }
+
+    /**
+     * Search manifests for a class. Returns the groupId and jar filename if found.
+     */
+    private static ManifestResult findInManifests(final File manifestDir, final String className) {
+        final File[] groupDirs = manifestDir.listFiles(File::isDirectory);
+        if (groupDirs == null) {
+            return null;
+        }
+
+        for (final File groupDir : groupDirs) {
+            final File[] manifests = groupDir.listFiles((final File d, final String n) -> n.endsWith(".manifest"));
+            if (manifests == null) {
+                continue;
+            }
+
+            for (final File manifest : manifests) {
+                try (final BufferedReader reader = new BufferedReader(new FileReader(manifest))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.equals(className)) {
+                            final String jarFileName = manifest.getName().replace(".manifest", "");
+                            return new ManifestResult(groupDir.getName(), jarFileName);
+                        }
+                    }
+                } catch (final IOException e) {
+                    // skip
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Resolve a jar file from the local Maven repository given groupId and jar filename.
+     */
+    private static File resolveJarFromRepo(final File repoDir, final String groupId, final String jarFileName) {
+        final String groupPath = groupId.replace('.', '/');
+        final File groupDir = new File(repoDir, groupPath);
+        if (!groupDir.exists()) {
+            return null;
+        }
+
+        // Walk the groupId directory to find the jar
+        final File[] files = groupDir.listFiles();
+        if (files == null) {
+            return null;
+        }
+
+        for (final File artifactDir : files) {
+            if (!artifactDir.isDirectory()) {
+                continue;
+            }
+            final File[] versionDirs = artifactDir.listFiles(File::isDirectory);
+            if (versionDirs == null) {
+                continue;
+            }
+            for (final File versionDir : versionDirs) {
+                final File jar = new File(versionDir, jarFileName);
+                if (jar.exists()) {
+                    return jar;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Search project artifacts for a jar with a specific filename.
+     */
+    private File findJarInArtifacts(final String jarFileName) {
+        for (final Artifact artifact : project.getArtifacts()) {
+            final File file = artifact.getFile();
+            if (file != null && file.getName().equals(jarFileName)) {
+                return file;
+            }
+        }
+        return null;
+    }
+
+    private record ManifestResult(String groupId, String jarFileName) {
     }
 }

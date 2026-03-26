@@ -85,7 +85,8 @@ public final class HandlerEnhancer {
         @Override
         public MethodVisitor visitMethod(final int access, final String name, final String descriptor,
                                          final String signature, final String[] exceptions) {
-            if (!methodsToWrap.contains(name) || "<init>".equals(name) || "<clinit>".equals(name)) {
+            final boolean shouldWrap = methodsToWrap.contains(name) || methodsToWrap.contains("*");
+            if (!shouldWrap || "<init>".equals(name) || "<clinit>".equals(name)) {
                 return super.visitMethod(access, name, descriptor, signature, exceptions);
             }
 
