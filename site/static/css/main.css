@@ -1011,7 +1011,7 @@ body.home .main-content {
 .hero-shape-3 {
   width: 100px;
   height: 100px;
-  background: var(--orange);
+  background: #0ea5e9;
   opacity: 0.08;
   top: 50%;
   right: 12%;
@@ -1259,7 +1259,12 @@ body.home .main-content {
 
 /* Alternate background */
 .code-showcase-alt {
-  background: #ffffff;
+  background: var(--surface-content);
+  border-top: none;
+}
+
+.code-showcase-cyan {
+  background: #f0f9ff;
   border-top: none;
 }
 

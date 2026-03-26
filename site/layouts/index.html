@@ -56,7 +56,7 @@
 </section>
 
 <!-- ░░░ CODE SHOWCASE 1: Find anything ░░░ -->
-<section class="code-showcase">
+<section class="code-showcase code-showcase-alt">
   <div class="code-showcase-inner">
     <div class="code-showcase-block">
 <pre><code>$ mvn jackknife:index \
@@ -75,7 +75,7 @@ Found com.fasterxml.jackson.databind.ObjectMapper
 </section>
 
 <!-- ░░░ CODE SHOWCASE 2: Decompile (reversed) ░░░ -->
-<section class="code-showcase">
+<section class="code-showcase code-showcase-cyan">
   <div class="code-showcase-inner reverse">
     <div class="code-showcase-block">
 <pre><code>$ mvn jackknife:decompile \
@@ -115,7 +115,7 @@ $ mvn test</code></pre>
 </section>
 
 <!-- ░░░ CODE SHOWCASE 4: JSON Output (reversed) ░░░ -->
-<section class="code-showcase">
+<section class="code-showcase code-showcase-cyan">
   <div class="code-showcase-inner reverse">
     <div class="code-showcase-block">
 <pre><code>JACKKNIFE {"event":"call","time":"12.3us",
@@ -159,7 +159,7 @@ JACKKNIFE {"event":"call","time":"0.1ms",
 </section>
 
 <!-- ░░░ USE EVERYWHERE ░░░ -->
-<section class="code-showcase">
+<section class="code-showcase code-showcase-cyan">
   <div class="code-showcase-inner">
     <div class="code-showcase-block">
 <pre><code>&lt;!-- ~/.m2/settings.xml --&gt;
@@ -193,9 +193,8 @@ JACKKNIFE {"event":"call","time":"0.1ms",
 </section>
 
 <!-- ░░░ DOC CARDS ░░░ -->
-<section class="doc-cards-section">
-  <div class="doc-cards-inner">
-  <h2 class="section-heading">Explore the docs</h2>
+<section class="home-docs">
+  <h2>Explore the docs</h2>
   <div class="doc-cards">
     {{ range .Site.Sections }}
     <a href="{{ .RelPermalink }}" class="doc-card">
@@ -205,7 +204,6 @@ JACKKNIFE {"event":"call","time":"0.1ms",
       {{ end }}
     </a>
     {{ end }}
-  </div>
   </div>
 </section>
 
