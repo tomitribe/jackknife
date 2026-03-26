@@ -1,0 +1,212 @@
+{{ define "main" }}
+
+<!-- ░░░ HERO ░░░ -->
+<section class="hero">
+  <div class="hero-shape hero-shape-1"></div>
+  <div class="hero-shape hero-shape-2"></div>
+  <div class="hero-shape hero-shape-3"></div>
+  <div class="hero-inner">
+    <div class="hero-badge">Supercharge your AI-assisted Java development</div>
+    <h1>Code &rarr; Test &rarr; Debug<br><span class="accent">Built for Claude</span></h1>
+    <p class="hero-sub">Tired of approving <code>find ~/.m2</code> searches?<br>Sick of extracting jars to <code>/tmp</code>?<br>Done approving <code>javap</code> for every class?<br>Wasting time adding and removing <code>System.out.println</code>?</p>
+    <div class="hero-actions">
+      <a href="{{ "getting-started/" | relURL }}" class="cta-primary">Get Started</a>
+      <a href="https://github.com/tomitribe/jackknife" class="cta-outline" target="_blank">GitHub</a>
+    </div>
+  </div>
+</section>
+
+<!-- ░░░ THREE PILLARS ░░░ -->
+<section class="pillars">
+  <div class="pillars-inner">
+    <div class="pillars-grid">
+
+      <div class="pillar-card">
+        <h3>Index</h3>
+        <p class="pillar-what">Find any class in any jar &mdash; project dependencies or <code>~/.m2</code>. Search by name, the right version appears automatically.</p>
+        <div class="pillar-eliminates">
+          <span class="eliminates-label">Eliminates:</span>
+          <code>find ~/.m2</code> <code>ls</code> <code>jar tf</code>
+        </div>
+        <p class="pillar-claude">Claude searches manifests with Grep. No permission prompts ever.</p>
+      </div>
+
+      <div class="pillar-card">
+        <h3>Decompile</h3>
+        <p class="pillar-what">Read decompiled source for any dependency. Entire jars cached as <code>.java</code> files on demand. One command, then direct file reads.</p>
+        <div class="pillar-eliminates">
+          <span class="eliminates-label">Eliminates:</span>
+          <code>jar xf</code> <code>javap</code> extracting to <code>/tmp</code>
+        </div>
+        <p class="pillar-claude">Claude reads <code>.java</code> files directly. No extraction, no approvals needed.</p>
+      </div>
+
+      <div class="pillar-card">
+        <h3>Instrument</h3>
+        <p class="pillar-what">Inject debug bytecode into dependencies while keeping your <code>~/.m2</code> clean. Args, return values, exceptions, timing &mdash; one JSON line per call.</p>
+        <div class="pillar-eliminates">
+          <span class="eliminates-label">Eliminates:</span>
+          <code>System.out.println</code> debug code, temp commits
+        </div>
+        <p class="pillar-claude">Structured JSON Claude can parse. Return values go straight into <code>assertEquals</code>.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ░░░ CODE SHOWCASE 1: Find anything ░░░ -->
+<section class="code-showcase">
+  <div class="code-showcase-inner">
+    <div class="code-showcase-block">
+<pre><code>$ mvn jackknife:index \
+    -Dclass=com.fasterxml.jackson.databind.ObjectMapper
+
+Found com.fasterxml.jackson.databind.ObjectMapper
+  in com.fasterxml.jackson.core:jackson-databind:2.20.1
+  Indexed jackson-databind-2.20.1.jar</code></pre>
+    </div>
+    <div class="code-showcase-text">
+      <h2>Find anything in your local repo</h2>
+      <p>No more <code>find ~/.m2</code>, <code>jar tf</code>, <code>jar xf</code>, <code>javap</code>. One command finds the class, picks the latest version, indexes the jar. Search manifests with Grep &mdash; no permission prompts.</p>
+      <a href="{{ "explore/" | relURL }}" class="text-link">Exploring dependencies &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ░░░ CODE SHOWCASE 2: Decompile (reversed) ░░░ -->
+<section class="code-showcase">
+  <div class="code-showcase-inner reverse">
+    <div class="code-showcase-block">
+<pre><code>$ mvn jackknife:decompile \
+    -Dclass=com.fasterxml.jackson.databind.ObjectMapper
+
+Decompiling com.fasterxml.jackson.core:jackson-databind-2.20.1.jar
+Decompiled 1247 classes to .jackknife/source/
+
+$ Read .jackknife/source/com.fasterxml.jackson.core/
+    jackson-databind-2.20.1/com/fasterxml/jackson/
+    databind/ObjectMapper.java</code></pre>
+    </div>
+    <div class="code-showcase-text">
+      <h2>Decompile entire jars instantly</h2>
+      <p>Every class in the jar is decompiled with Vineflower and written as a <code>.java</code> file. Cached for instant re-reads. Claude reads the files directly &mdash; no extraction to <code>/tmp</code>, no approvals.</p>
+      <a href="{{ "explore/" | relURL }}" class="text-link">Reading source &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ░░░ CODE SHOWCASE 3: Instrument ░░░ -->
+<section class="code-showcase">
+  <div class="code-showcase-inner">
+    <div class="code-showcase-block">
+<pre><code>$ mvn jackknife:instrument \
+    -Dclass=org.tomitribe.util.Join \
+    -Dmethod=join
+
+$ mvn test</code></pre>
+    </div>
+    <div class="code-showcase-text">
+      <h2>Instrument, then test</h2>
+      <p>Pick a class and method. Jackknife injects debug bytecode &mdash; your source stays untouched, your <code>~/.m2</code> stays clean. Run your tests normally and the debug output appears.</p>
+      <a href="{{ "instrument/" | relURL }}" class="text-link">Learn about instrumentation &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ░░░ CODE SHOWCASE 4: JSON Output (reversed) ░░░ -->
+<section class="code-showcase">
+  <div class="code-showcase-inner reverse">
+    <div class="code-showcase-block">
+<pre><code>JACKKNIFE {"event":"call","time":"12.3us",
+  "class":"Join","method":"join",
+  "args":[", ",["x","y","z"]],
+  "return":"x, y, z"}
+
+JACKKNIFE {"event":"call","time":"0.1ms",
+  "class":"Join","method":"join",
+  "args":["bad"],
+  "exception":{"type":"IllegalArgumentException",
+    "message":"bad input"}}</code></pre>
+    </div>
+    <div class="code-showcase-text">
+      <h2>Structured JSON, one line per call</h2>
+      <p>Every instrumented call produces one <code>JACKKNIFE</code>-prefixed JSON line. Args, return values, exceptions, timing. Grep for failures. Copy return values straight into <code>assertEquals</code>.</p>
+      <a href="{{ "output/" | relURL }}" class="text-link">Output format reference &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ░░░ SETUP SECTION ░░░ -->
+<section class="install-section">
+  <div class="install-inner">
+    <div class="install-code">
+<pre><code>## Jackknife
+- When you need to inspect, decompile, or
+  find classes in jar dependencies, run
+  `mvn jackknife:index` in the project.
+  This generates `.jackknife/USAGE.md`
+  with full instructions.
+  Read that file — it has everything
+  you need.</code></pre>
+    </div>
+    <div class="install-text">
+      <h2>Add to your CLAUDE.md</h2>
+      <p>Drop this in your <code>~/.claude/CLAUDE.md</code> and every Claude session knows how to use Jackknife. No skill to install, no plugin to configure. Claude reads the generated <code>USAGE.md</code> and takes it from there.</p>
+      <a href="{{ "getting-started/" | relURL }}" class="text-link-light">Getting started guide &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ░░░ USE EVERYWHERE ░░░ -->
+<section class="code-showcase">
+  <div class="code-showcase-inner">
+    <div class="code-showcase-block">
+<pre><code>&lt;!-- ~/.m2/settings.xml --&gt;
+&lt;settings&gt;
+  &lt;pluginGroups&gt;
+    &lt;pluginGroup&gt;org.tomitribe.jackknife&lt;/pluginGroup&gt;
+  &lt;/pluginGroups&gt;
+  &lt;profiles&gt;
+    &lt;profile&gt;
+      &lt;id&gt;jackknife&lt;/id&gt;
+      &lt;activation&gt;
+        &lt;activeByDefault&gt;true&lt;/activeByDefault&gt;
+      &lt;/activation&gt;
+      &lt;pluginRepositories&gt;
+        &lt;pluginRepository&gt;
+          &lt;id&gt;central&lt;/id&gt;
+          &lt;url&gt;https://repo.maven.apache.org/maven2&lt;/url&gt;
+        &lt;/pluginRepository&gt;
+      &lt;/pluginRepositories&gt;
+    &lt;/profile&gt;
+  &lt;/profiles&gt;
+&lt;/settings&gt;</code></pre>
+    </div>
+    <div class="code-showcase-text">
+      <h2>Use everywhere</h2>
+      <p>Add Jackknife to your <code>~/.m2/settings.xml</code> once and it's available in every Maven project. No per-project <code>pom.xml</code> changes needed. Just run <code>mvn jackknife:index</code> in any project.</p>
+      <p>All state lives in <code>.jackknife/</code> at the project root &mdash; add it to <code>.gitignore</code>. Nothing touches your source, your jars, or your repo.</p>
+      <a href="{{ "getting-started/" | relURL }}" class="text-link">Installation guide &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ░░░ DOC CARDS ░░░ -->
+<section class="doc-cards-section">
+  <div class="doc-cards-inner">
+  <h2 class="section-heading">Explore the docs</h2>
+  <div class="doc-cards">
+    {{ range .Site.Sections }}
+    <a href="{{ .RelPermalink }}" class="doc-card">
+      <h3>{{ .Title }}</h3>
+      {{ with .Params.description }}
+      <p>{{ . }}</p>
+      {{ end }}
+    </a>
+    {{ end }}
+  </div>
+  </div>
+</section>
+
+{{ end }}

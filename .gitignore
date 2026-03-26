@@ -18,3 +18,8 @@ Thumbs.db
 
 # Cloned reference repos
 tmp/
+
+# Hugo
+site/public/
+site/resources/
+site/.hugo_build.lock

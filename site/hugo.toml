@@ -1,0 +1,42 @@
+baseURL = 'https://tomitribe.github.io/jackknife/'
+languageCode = 'en-us'
+title = 'Jackknife'
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
+  [markup.tableOfContents]
+    endLevel = 4
+    ordered = false
+    startLevel = 2
+  [markup.highlight]
+    noClasses = false
+
+[menu]
+  [[menu.main]]
+    name = 'Docs'
+    url = '/getting-started/'
+    weight = 1
+  [[menu.main]]
+    name = 'Explore'
+    url = '/explore/'
+    weight = 2
+  [[menu.main]]
+    name = 'Instrument'
+    url = '/instrument/'
+    weight = 3
+  [[menu.main]]
+    name = 'Output'
+    url = '/output/'
+    weight = 4
+  [[menu.main]]
+    name = 'Goals'
+    url = '/goals/'
+    weight = 5
+  [[menu.main]]
+    name = 'GitHub'
+    url = 'https://github.com/tomitribe/jackknife'
+    weight = 100
+    [menu.main.params]
+      external = true
