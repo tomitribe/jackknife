@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.tomitribe.jackknife</groupId>
     <artifactId>jackknife</artifactId>
-    <version>0.3-SNAPSHOT</version>
+    <version>0.3</version>
   </parent>
 
   <artifactId>jackknife-maven-plugin</artifactId>
