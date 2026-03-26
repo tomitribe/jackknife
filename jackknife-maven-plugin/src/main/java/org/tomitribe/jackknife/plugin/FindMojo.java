@@ -53,7 +53,7 @@ public class FindMojo extends AbstractMojo {
         final File manifestDir = new File(rootDir, ".jackknife/manifest");
 
         if (!manifestDir.exists()) {
-            throw new MojoFailureException("Manifests not found. Run 'mvn jackknife:index' first.");
+            throw new MojoFailureException("Manifests not found. Run:  mvn jackknife:index");
         }
 
         final String searchTerm;
@@ -97,7 +97,11 @@ public class FindMojo extends AbstractMojo {
 
         if (!found) {
             final String term = className != null ? className : query;
-            throw new MojoFailureException("No matches found for: " + term);
+            throw new MojoFailureException("No matches found for: " + term + "\n"
+                    + "To rebuild manifests:           mvn jackknife:index\n"
+                    + (className != null
+                        ? "To search ~/.m2/repository:     mvn jackknife:index -Dclass=" + className
+                        : "To search ~/.m2/repository:     mvn jackknife:index -Dscope=repo -Dfilter=\"**" + query + "**\""));
         }
     }
 

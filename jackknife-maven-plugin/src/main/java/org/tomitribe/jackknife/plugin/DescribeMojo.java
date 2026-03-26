@@ -50,7 +50,7 @@ public class DescribeMojo extends AbstractMojo {
         final File sourceDir = new File(rootDir, ".jackknife/source");
 
         if (!manifestDir.exists()) {
-            throw new MojoFailureException("Manifests not found. Run 'mvn jackknife:index' first.");
+            throw new MojoFailureException("Manifests not found. Run:  mvn jackknife:index");
         }
 
         // Search manifests to find which jar has this class
@@ -92,8 +92,9 @@ public class DescribeMojo extends AbstractMojo {
         }
 
         if (!found) {
-            throw new MojoFailureException("Class not found in manifests: " + className
-                    + ". Run 'mvn jackknife:index' to rebuild.");
+            throw new MojoFailureException("Class not found in manifests: " + className + "\n"
+                    + "To rebuild manifests:           mvn jackknife:index\n"
+                    + "To search ~/.m2/repository:     mvn jackknife:index -Dclass=" + className);
         }
     }
 

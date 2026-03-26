@@ -70,7 +70,7 @@ public class InstrumentMojo extends AbstractMojo {
         final File instrumentDir = new File(jackknife, "instrument");
 
         if (!manifestDir.exists()) {
-            throw new MojoFailureException("Manifests not found. Run 'mvn jackknife:index' first.");
+            throw new MojoFailureException("Manifests not found. Run:  mvn jackknife:index");
         }
 
         // Parse the method specification
@@ -114,8 +114,9 @@ public class InstrumentMojo extends AbstractMojo {
             getLog().info("");
             getLog().info("Wrote instrumentation config to .jackknife/instrument/_project/");
         } else {
-            throw new MojoFailureException("Class " + className + " not found in any manifest or project source. "
-                    + "Run 'mvn jackknife:index' to rebuild manifests.");
+            throw new MojoFailureException("Class " + className + " not found in any manifest or project source.\n"
+                    + "To rebuild manifests:           mvn jackknife:index\n"
+                    + "To search ~/.m2/repository:     mvn jackknife:index -Dclass=" + className);
         }
 
         getLog().info("Next build will apply instrumentation automatically.");

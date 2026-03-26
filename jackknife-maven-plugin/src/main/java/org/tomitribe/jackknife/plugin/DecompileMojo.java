@@ -87,7 +87,9 @@ public class DecompileMojo extends AbstractMojo {
         }
 
         if (targetJar == null) {
-            throw new MojoFailureException("Class not found in any dependency: " + className);
+            throw new MojoFailureException("Class not found in any indexed jar: " + className + "\n"
+                    + "To index project dependencies:  mvn jackknife:index\n"
+                    + "To search ~/.m2/repository:     mvn jackknife:index -Dclass=" + className);
         }
 
         final String groupId = targetArtifact.getGroupId();
