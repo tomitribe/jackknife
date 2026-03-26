@@ -1,12 +1,38 @@
 ---
 title: "Getting Started"
-description: "Add Jackknife to your Maven project and start exploring dependencies."
+description: "Add Jackknife to your project and start exploring."
 weight: 1
 ---
 
-## Installation
+## Add to your CLAUDE.md
 
-Add the plugin to your `pom.xml`:
+Drop this in `~/.claude/CLAUDE.md` so every Claude session knows how to use Jackknife:
+
+```markdown
+## Jackknife
+- When you need to inspect, decompile, or find classes in jar dependencies,
+  run `mvn jackknife:index` in the project. This generates `.jackknife/USAGE.md`
+  with full instructions. Read that file — it has everything you need.
+```
+
+No skill to install, no plugin to configure. Claude reads the generated `USAGE.md`
+and takes it from there.
+
+## Use everywhere
+
+Add Jackknife to `~/.m2/settings.xml` and it's available in every Maven project:
+
+```xml
+<settings>
+  <pluginGroups>
+    <pluginGroup>org.tomitribe.jackknife</pluginGroup>
+  </pluginGroups>
+</settings>
+```
+
+## Add to a specific project
+
+Or add the plugin to a project's `pom.xml`:
 
 ```xml
 <plugin>
@@ -25,9 +51,6 @@ mvn jackknife:index
 This creates `.jackknife/manifest/` with lightweight class listings for every
 dependency jar. Sub-second for an entire classpath.
 
-Read `.jackknife/USAGE.md` for the full reference — it's generated with
-every index and has everything you need.
-
 ## Find a class
 
 ```bash
@@ -40,19 +63,17 @@ Grep "ObjectMapper" .jackknife/manifest/
 mvn jackknife:decompile -Dclass=com.fasterxml.jackson.databind.ObjectMapper
 ```
 
-The entire jar is decompiled. Every class is a `.java` file in `.jackknife/source/`.
-
 ## Instrument a method
 
 ```bash
-mvn jackknife:instrument -Dclass=com.example.Foo -Dmethod=bar
+mvn jackknife:instrument -Dclass=org.tomitribe.util.Join -Dmethod=join
 mvn test
 ```
 
-Debug output appears as JSON during your test run:
+Debug output appears as JSON:
 
 ```
-JACKKNIFE {"event":"call","time":"12.3us","class":"Foo","method":"bar","args":["hello"],"return":"world"}
+JACKKNIFE {"event":"call","time":"12.3us","class":"Join","method":"join","args":[", ",["x","y","z"]],"return":"x, y, z"}
 ```
 
 ## Clean up
@@ -60,3 +81,11 @@ JACKKNIFE {"event":"call","time":"12.3us","class":"Foo","method":"bar","args":["
 ```bash
 mvn jackknife:clean
 ```
+
+## Add .jackknife/ to .gitignore
+
+```
+.jackknife/
+```
+
+All Jackknife state is local. Nothing touches your source, your jars, or your repository.

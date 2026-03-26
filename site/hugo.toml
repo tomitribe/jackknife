@@ -2,6 +2,11 @@ baseURL = 'https://tomitribe.github.io/jackknife/'
 languageCode = 'en-us'
 title = 'Jackknife'
 
+[params]
+  brand = 'Jackknife'
+  tagline = 'by Tomitribe'
+  description = 'Bytecode instrumentation for Java. Built for Claude, useful for everyone.'
+
 [markup]
   [markup.goldmark]
     [markup.goldmark.renderer]
@@ -19,21 +24,25 @@ title = 'Jackknife'
     url = '/getting-started/'
     weight = 1
   [[menu.main]]
-    name = 'Explore'
-    url = '/explore/'
+    name = 'Index'
+    url = '/index-goal/'
     weight = 2
+  [[menu.main]]
+    name = 'Decompile'
+    url = '/decompile/'
+    weight = 3
   [[menu.main]]
     name = 'Instrument'
     url = '/instrument/'
-    weight = 3
+    weight = 4
   [[menu.main]]
     name = 'Output'
     url = '/output/'
-    weight = 4
+    weight = 5
   [[menu.main]]
     name = 'Goals'
     url = '/goals/'
-    weight = 5
+    weight = 6
   [[menu.main]]
     name = 'GitHub'
     url = 'https://github.com/tomitribe/jackknife'

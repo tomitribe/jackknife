@@ -45,8 +45,8 @@
   --content-max: 740px;
 
   /* Typography */
-  --font-display: 'Urbanist', system-ui, sans-serif;
-  --font-body: 'Lato', system-ui, sans-serif;
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
 
   /* Misc */
