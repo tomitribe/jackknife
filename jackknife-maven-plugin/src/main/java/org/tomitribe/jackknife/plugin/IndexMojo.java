@@ -25,10 +25,13 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.List;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -54,6 +57,21 @@ public class IndexMojo extends AbstractMojo {
     @Parameter(defaultValue = "${session.executionRootDirectory}", readonly = true)
     private String executionRootDirectory;
 
+    @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
+    private String localRepository;
+
+    /** Search for a specific class in ~/.m2/repository */
+    @Parameter(property = "class")
+    private String className;
+
+    /** Widen search to the entire local repository */
+    @Parameter(property = "scope")
+    private String scope;
+
+    /** Glob filter for repo-wide search */
+    @Parameter(property = "filter")
+    private String filter;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         final File rootDir = new File(executionRootDirectory);
@@ -62,6 +80,29 @@ public class IndexMojo extends AbstractMojo {
 
         manifestDir.mkdirs();
 
+        // Smart class search: mvn jackknife:index -Dclass=com.example.Foo
+        if (className != null && !className.isEmpty()) {
+            executeClassSearch(jackknife, manifestDir);
+            return;
+        }
+
+        // Repo-wide search: mvn jackknife:index -Dscope=repo -Dfilter="*jackson*"
+        if ("repo".equals(scope)) {
+            executeRepoSearch(manifestDir);
+            return;
+        }
+
+        // Default: index project dependencies
+        executeProjectIndex(manifestDir);
+
+        try {
+            writeUsage(jackknife);
+        } catch (final IOException e) {
+            throw new MojoExecutionException("Failed to write USAGE.md", e);
+        }
+    }
+
+    private void executeProjectIndex(final File manifestDir) {
         final Set<Artifact> artifacts = project.getArtifacts();
         int indexed = 0;
         int skipped = 0;
@@ -103,12 +144,138 @@ public class IndexMojo extends AbstractMojo {
         }
 
         getLog().info("Manifested " + indexed + " jars, skipped " + skipped + " (up to date or non-jar)");
+    }
+
+    /**
+     * Smart class search: find a class in ~/.m2/repository.
+     * Checks existing manifests first, then walks the repo.
+     */
+    private void executeClassSearch(final File jackknife, final File manifestDir) throws MojoExecutionException {
+        // Step 1: check existing manifests
+        final String match = searchExistingManifests(manifestDir, className);
+        if (match != null) {
+            getLog().info("Found in existing manifest: " + match);
+            return;
+        }
+
+        // Step 2: search ~/.m2/repository
+        final File repoDir = new File(localRepository);
+        if (!repoDir.exists()) {
+            throw new MojoExecutionException("Local repository not found: " + repoDir);
+        }
+
+        getLog().info("Searching " + repoDir + " for " + className + "...");
 
         try {
-            writeUsage(jackknife);
+            final File jar = RepoSearch.findClassInRepo(repoDir, className);
+            if (jar == null) {
+                throw new MojoExecutionException("Class " + className + " not found in " + repoDir);
+            }
+
+            // Index the found jar
+            final RepoSearch.ArtifactInfo info = RepoSearch.parseArtifactInfo(jar, repoDir);
+            if (info == null) {
+                throw new MojoExecutionException("Could not parse artifact info from " + jar);
+            }
+
+            final File groupDir = new File(manifestDir, info.groupId());
+            final File manifestFile = new File(groupDir, jar.getName() + ".manifest");
+            writeManifest(jar, manifestFile);
+
+            getLog().info("Found " + className + " in " + info.groupId() + ":" + info.artifactId() + ":" + info.version());
+            getLog().info("Indexed " + jar.getName() + " → " + manifestFile.getPath());
+
+            try {
+                writeUsage(jackknife);
+            } catch (final IOException e) {
+                // non-fatal
+            }
         } catch (final IOException e) {
-            throw new MojoExecutionException("Failed to write USAGE.md", e);
+            throw new MojoExecutionException("Error searching repository: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Repo-wide search with glob filter.
+     */
+    private void executeRepoSearch(final File manifestDir) throws MojoExecutionException {
+        final File repoDir = new File(localRepository);
+        if (!repoDir.exists()) {
+            throw new MojoExecutionException("Local repository not found: " + repoDir);
+        }
+
+        if (filter == null || filter.isEmpty()) {
+            throw new MojoExecutionException("Repo-wide search requires -Dfilter=<glob>");
+        }
+
+        getLog().info("Searching " + repoDir + " with filter: " + filter);
+
+        try {
+            final List<File> jars = RepoSearch.findJarsByFilter(repoDir, filter);
+            if (jars.isEmpty()) {
+                getLog().warn("No jars matching filter: " + filter);
+                return;
+            }
+
+            int indexed = 0;
+            for (final File jar : jars) {
+                final RepoSearch.ArtifactInfo info = RepoSearch.parseArtifactInfo(jar, repoDir);
+                if (info == null) {
+                    continue;
+                }
+
+                final File groupDir = new File(manifestDir, info.groupId());
+                final File manifestFile = new File(groupDir, jar.getName() + ".manifest");
+
+                if (manifestFile.exists() && manifestFile.lastModified() >= jar.lastModified()) {
+                    continue;
+                }
+
+                writeManifest(jar, manifestFile);
+                getLog().info("  " + info.groupId() + ":" + info.artifactId() + ":" + info.version());
+                indexed++;
+            }
+
+            getLog().info("Indexed " + indexed + " jars from repo");
+        } catch (final IOException e) {
+            throw new MojoExecutionException("Error searching repository: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Search existing manifests for a class name. Returns the manifest file path if found.
+     */
+    private static String searchExistingManifests(final File manifestDir, final String className) {
+        if (!manifestDir.exists()) {
+            return null;
+        }
+
+        final File[] groupDirs = manifestDir.listFiles(File::isDirectory);
+        if (groupDirs == null) {
+            return null;
+        }
+
+        for (final File groupDir : groupDirs) {
+            final File[] manifests = groupDir.listFiles((final File d, final String n) -> n.endsWith(".manifest"));
+            if (manifests == null) {
+                continue;
+            }
+
+            for (final File manifest : manifests) {
+                try (final BufferedReader reader = new BufferedReader(new FileReader(manifest))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.equals(className)) {
+                            return manifest.getPath();
+                        }
+                    }
+                } catch (final IOException e) {
+                    // skip
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -154,183 +321,12 @@ public class IndexMojo extends AbstractMojo {
     private void writeUsage(final File jackknife) throws IOException {
         final File usageFile = new File(jackknife, "USAGE.md");
 
-        try (final PrintWriter out = new PrintWriter(new FileWriter(usageFile))) {
-            out.println("<!-- DO NOT EDIT — generated by jackknife-maven-plugin. Regenerated on every `mvn jackknife:index`. -->");
-            out.println();
-            out.println("# Jackknife");
-            out.println();
-            out.println("Two capabilities for working with Java dependencies:");
-            out.println();
-            out.println("1. **Explore** — Find classes, read decompiled source, understand APIs.");
-            out.println("   No more digging through ~/.m2/repository or guessing at method signatures.");
-            out.println("2. **Debug** — Instrument methods to capture arguments, return values,");
-            out.println("   exceptions, and timing as structured JSON. No more adding println");
-            out.println("   statements to tests.");
-            out.println();
-            out.println("## Exploring Dependencies");
-            out.println();
-            out.println("### Find a class");
-            out.println();
-            out.println("Manifests list every class in every dependency jar. One class name per line.");
-            out.println();
-            out.println("```");
-            out.println("Grep \"CustomField\" .jackknife/manifest/");
-            out.println("```");
-            out.println();
-            out.println("This tells you which jar contains the class and its full package name.");
-            out.println();
-            out.println("### Read source code");
-            out.println();
-            out.println("Check if the class has already been decompiled:");
-            out.println();
-            out.println("```");
-            out.println("Glob .jackknife/source/**/<ClassName>.java");
-            out.println("```");
-            out.println();
-            out.println("If found, read it directly. If not, decompile the entire jar (one-time, ~3-5s):");
-            out.println();
-            out.println("```");
-            out.println("mvn jackknife:decompile -Dclass=com.example.MyClass");
-            out.println("```");
-            out.println();
-            out.println("Every class in that jar is now available as a .java file. All subsequent");
-            out.println("reads are direct file access — no Maven invocation needed.");
-            out.println();
-            out.println("### Find resources");
-            out.println();
-            out.println("```");
-            out.println("Grep \"META-INF/services\" .jackknife/manifest/");
-            out.println("```");
-            out.println();
-            out.println("### Directory structure");
-            out.println();
-            out.println("```");
-            out.println(".jackknife/");
-            out.println("├── manifest/            Class listings (all jars, sub-second)");
-            out.println("│   └── <groupId>/");
-            out.println("│       └── <artifact>-<version>.jar.manifest");
-            out.println("├── source/              Decompiled source (per-jar, on demand)");
-            out.println("│   └── <groupId>/");
-            out.println("│       └── <artifact>-<version>/");
-            out.println("│           └── com/example/MyClass.java");
-            out.println("├── instrument/          Pending instrumentation configs");
-            out.println("├── modified/            Patched jars (applied on next build)");
-            out.println("└── USAGE.md             This file");
-            out.println("```");
-            out.println();
-            out.println("## Debugging with Instrumentation");
-            out.println();
-            out.println("### The workflow");
-            out.println();
-            out.println("1. A test fails or you need to understand what a method receives and returns");
-            out.println("2. Instrument the method — jackknife injects debug output, no source changes");
-            out.println("3. Run `mvn test` — structured JSON output shows exactly what happened");
-            out.println("4. Extract values from the JSON to fix assertions or understand behavior");
-            out.println("5. Clean up when done: `mvn jackknife:clean -Dpath=modified`");
-            out.println();
-            out.println("### Instrument a method");
-            out.println();
-            out.println("```");
-            out.println("mvn jackknife:instrument -Dmethod=\"com.example.Foo.bar(java.lang.String,int)\"");
-            out.println("```");
-            out.println();
-            out.println("### Matching granularity");
-            out.println();
-            out.println("| Input | What gets instrumented |");
-            out.println("|-------|----------------------|");
-            out.println("| `com.example.Foo.bar(String,int)` | That one method |");
-            out.println("| `com.example.Foo.bar` | All overloads of bar |");
-            out.println("| `bar(String,int)` | bar(String,int) in any class |");
-            out.println();
-            out.println("### Modes");
-            out.println();
-            out.println("- **debug** (default) — args, return value, exceptions, and timing");
-            out.println("- **timing** — elapsed time and status only, no args or return values");
-            out.println();
-            out.println("```");
-            out.println("mvn jackknife:instrument -Dmethod=\"com.example.Foo.bar\" -Dmode=timing");
-            out.println("```");
-            out.println();
-            out.println("### Run the build");
-            out.println();
-            out.println("```");
-            out.println("mvn test");
-            out.println("```");
-            out.println();
-            out.println("The next build automatically applies the instrumentation. No special flags.");
-            out.println();
-            out.println("### Reading the output");
-            out.println();
-            out.println("Every instrumented call produces one line prefixed with `JACKKNIFE`:");
-            out.println();
-            out.println("```");
-            out.println("JACKKNIFE {\"event\":\"register\",\"mode\":\"debug\",\"method\":\"org.tomitribe.util.Join.join\"}");
-            out.println("JACKKNIFE {\"event\":\"call\",\"time\":\"12.3us\",\"class\":\"Join\",\"method\":\"join\",\"args\":[\", \",[\"x\",\"y\",\"z\"]],\"return\":\"x, y, z\"}");
-            out.println("```");
-            out.println();
-            out.println("The register line confirms instrumentation is active. If you see the");
-            out.println("register event but no call events, the method was never called by your test.");
-            out.println();
-            out.println("**Grep for all instrumented calls:**");
-            out.println();
-            out.println("```");
-            out.println("Grep \"JACKKNIFE\" target/surefire-reports/");
-            out.println("```");
-            out.println();
-            out.println("### JSON fields");
-            out.println();
-            out.println("| Field | Description |");
-            out.println("|-------|------------|");
-            out.println("| `event` | `\"register\"` or `\"call\"` |");
-            out.println("| `time` | Elapsed time (ns, us, ms, s) |");
-            out.println("| `class` | Simple class name |");
-            out.println("| `method` | Method name |");
-            out.println("| `args` | JSON array of argument values |");
-            out.println("| `return` | Return value (absent on exception) |");
-            out.println("| `exception` | `{\"type\":\"...\",\"message\":\"...\"}` (absent on success) |");
-            out.println("| `status` | `\"returned\"` or `\"thrown\"` (on file-reference lines) |");
-            out.println("| `file` | Capture file path (when values too large for one line) |");
-            out.println();
-            out.println("### Extracting values for assertions");
-            out.println();
-            out.println("Strings are JSON-quoted, numbers are bare, null is `null`, booleans are bare.");
-            out.println("Copy values directly from the `\"return\"` field into assertEquals:");
-            out.println();
-            out.println("```java");
-            out.println("// From output: \"return\":\"a and b and c\"");
-            out.println("assertEquals(\"a and b and c\", result);");
-            out.println();
-            out.println("// From output: \"return\":42");
-            out.println("assertEquals(42, result);");
-            out.println();
-            out.println("// From output: \"return\":null");
-            out.println("assertNull(result);");
-            out.println("```");
-            out.println();
-            out.println("### Capture files");
-            out.println();
-            out.println("When arguments or return values are too large for a single line, the full");
-            out.println("JSON event is written to a capture file:");
-            out.println();
-            out.println("```");
-            out.println("JACKKNIFE {\"event\":\"call\",\"time\":\"2.3ms\",\"class\":\"Join\",\"method\":\"join\",\"status\":\"returned\",\"file\":\"target/jackknife/captures/capture-0012.txt\"}");
-            out.println("```");
-            out.println();
-            out.println("The console line shows timing, method, and status for quick scanning.");
-            out.println("Read the capture file for the complete JSON event with all argument");
-            out.println("and return values.");
-            out.println();
-            out.println("### Cleaning up");
-            out.println();
-            out.println("```");
-            out.println("mvn jackknife:clean                                # remove all of .jackknife/");
-            out.println("mvn jackknife:clean -Dpath=modified                # stop instrumentation, keep manifests");
-            out.println("mvn jackknife:clean -Dpath=modified/org.tomitribe  # remove one groupId's patches");
-            out.println("mvn jackknife:clean -Dpath=source                  # clear decompile cache");
-            out.println("```");
-            out.println();
-            out.println("After cleaning modified/, the next build uses original unmodified dependencies.");
-            out.println("Manifests and decompiled source are cheap to regenerate: `mvn jackknife:index`");
+        try (final var is = getClass().getResourceAsStream("/META-INF/jackknife/USAGE.md")) {
+            if (is == null) {
+                getLog().warn("USAGE.md resource not found on classpath");
+                return;
+            }
+            java.nio.file.Files.copy(is, usageFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         }
 
         getLog().info("Generated " + usageFile.getPath());
