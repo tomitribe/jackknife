@@ -89,61 +89,35 @@ public class InstrumentMojo extends AbstractMojo {
 
         getLog().info("Instrumenting " + className + "." + methodName + " [" + mode + "]");
 
-        // Search manifests to find which jar contains this class
-        final List<ManifestMatch> manifestMatches = searchManifests(manifestDir, className);
-
-        if (manifestMatches.isEmpty()) {
-            throw new MojoFailureException("Class " + className + " not found in any manifest. "
-                    + "Run 'mvn jackknife:index' to rebuild.");
-        }
-
         // Build the Snitch-format method string
         final String snitchMethod = parsed.toSnitchFormat();
         final String prefix = "timing".equals(mode) ? "" : "@";
         final String propertyLine = prefix + snitchMethod + " = " + snitchMethod;
 
-        // Write properties files for each matching artifact
-        int filesWritten = 0;
-        for (final ManifestMatch match : manifestMatches) {
-            final File groupDir = new File(instrumentDir, match.groupId);
-            groupDir.mkdirs();
+        // Search manifests to find which jar contains this class
+        final List<ManifestMatch> manifestMatches = searchManifests(manifestDir, className);
 
-            final File propsFile = new File(groupDir, match.artifactFileName + ".properties");
-
-            // Read existing lines
-            final Set<String> lines = new LinkedHashSet<>();
-            if (propsFile.exists()) {
-                try (final BufferedReader reader = new BufferedReader(new FileReader(propsFile))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        if (!line.startsWith("#") && !line.isBlank()) {
-                            lines.add(line);
-                        }
-                    }
-                } catch (final IOException e) {
-                    getLog().warn("Failed to read existing properties: " + propsFile);
-                }
+        if (!manifestMatches.isEmpty()) {
+            // Dependency jar — write config per matching artifact
+            int filesWritten = 0;
+            for (final ManifestMatch match : manifestMatches) {
+                filesWritten += writeInstrumentConfig(instrumentDir, match.groupId,
+                        match.artifactFileName + ".properties", propertyLine);
+                getLog().info("  " + match.groupId + ":" + match.artifactFileName);
             }
-
-            lines.add(propertyLine);
-
-            try (final PrintWriter out = new PrintWriter(new FileWriter(propsFile))) {
-                out.println("# Jackknife instrumentation config");
-                out.println("# Mode: " + mode);
-                out.println();
-                for (final String line : lines) {
-                    out.println(line);
-                }
-                filesWritten++;
-            } catch (final IOException e) {
-                throw new MojoExecutionException("Failed to write: " + propsFile, e);
-            }
-
-            getLog().info("  " + match.groupId + ":" + match.artifactFileName);
+            getLog().info("");
+            getLog().info("Wrote " + filesWritten + " instrumentation config(s) to .jackknife/instrument/");
+        } else if (isProjectClass(rootDir, className)) {
+            // Project code — write config to _project/
+            writeInstrumentConfig(instrumentDir, "_project", "project.properties", propertyLine);
+            getLog().info("  project code: " + className);
+            getLog().info("");
+            getLog().info("Wrote instrumentation config to .jackknife/instrument/_project/");
+        } else {
+            throw new MojoFailureException("Class " + className + " not found in any manifest or project source. "
+                    + "Run 'mvn jackknife:index' to rebuild manifests.");
         }
 
-        getLog().info("");
-        getLog().info("Wrote " + filesWritten + " instrumentation config(s) to .jackknife/instrument/");
         getLog().info("Next build will apply instrumentation automatically.");
     }
 
@@ -184,6 +158,62 @@ public class InstrumentMojo extends AbstractMojo {
             }
         } catch (final IOException e) {
             // skip
+        }
+        return false;
+    }
+
+    private int writeInstrumentConfig(final File instrumentDir, final String subDir,
+                                       final String fileName, final String propertyLine)
+            throws MojoExecutionException {
+        final File dir = new File(instrumentDir, subDir);
+        dir.mkdirs();
+
+        final File propsFile = new File(dir, fileName);
+
+        // Read existing lines
+        final Set<String> lines = new LinkedHashSet<>();
+        if (propsFile.exists()) {
+            try (final BufferedReader reader = new BufferedReader(new FileReader(propsFile))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.startsWith("#") && !line.isBlank()) {
+                        lines.add(line);
+                    }
+                }
+            } catch (final IOException e) {
+                getLog().warn("Failed to read existing properties: " + propsFile);
+            }
+        }
+
+        lines.add(propertyLine);
+
+        try (final PrintWriter out = new PrintWriter(new FileWriter(propsFile))) {
+            out.println("# Jackknife instrumentation config");
+            out.println("# Mode: " + mode);
+            out.println();
+            for (final String line : lines) {
+                out.println(line);
+            }
+        } catch (final IOException e) {
+            throw new MojoExecutionException("Failed to write: " + propsFile, e);
+        }
+        return 1;
+    }
+
+    private static boolean isProjectClass(final File rootDir, final String className) {
+        final String sourcePath = className.replace('.', '/') + ".java";
+
+        // Check common source roots
+        final String[] sourceRoots = {
+                "src/main/java",
+                "src/test/java"
+        };
+
+        for (final String root : sourceRoots) {
+            final File sourceFile = new File(rootDir, root + "/" + sourcePath);
+            if (sourceFile.exists()) {
+                return true;
+            }
         }
         return false;
     }
