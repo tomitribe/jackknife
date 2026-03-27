@@ -10,6 +10,13 @@
     <meta property="og:title" content="{{ if not .IsHome }}{{ .Title }} | {{ end }}Jackknife">
     <meta property="og:description" content="{{ with .Description }}{{ . }}{{ else }}Bytecode instrumentation for Java.{{ end }}">
     <meta property="og:url" content="{{ .Permalink }}">
+    <meta property="og:site_name" content="Jackknife">
+    {{ with .Site.Params.image }}<meta property="og:image" content="{{ . | absURL }}">{{ end }}
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ if not .IsHome }}{{ .Title }} | {{ end }}Jackknife">
+    <meta name="twitter:description" content="{{ with .Description }}{{ . }}{{ else }}Bytecode instrumentation for Java.{{ end }}">
+    {{ with .Site.Params.image }}<meta name="twitter:image" content="{{ . | absURL }}">{{ end }}
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

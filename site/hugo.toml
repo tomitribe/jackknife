@@ -6,6 +6,7 @@ title = 'Jackknife'
   brand = 'Jackknife'
   tagline = 'by Tomitribe'
   description = 'Bytecode instrumentation for Java. Built for Claude, useful for everyone.'
+  image = 'images/social-card.svg'
 
 [markup]
   [markup.goldmark]
