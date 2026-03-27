@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- OPTION F: Card-on-card — white card floating on navy, problem outside, solution inside -->
+  <rect width="1200" height="630" fill="#0f172a"/>
+
+  <!-- Problem text above card -->
+  <text x="600" y="120" font-family="Inter, system-ui, sans-serif" font-weight="300" font-size="58" fill="#94a3b8" text-anchor="middle">Claude searching ~/.m2 again?</text>
+
+  <!-- White card -->
+  <rect x="100" y="180" width="1000" height="300" rx="16" fill="#ffffff"/>
+
+  <!-- Solution inside card -->
+  <text x="600" y="310" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="52" fill="#0f172a" text-anchor="middle">Stop approving.</text>
+  <text x="600" y="390" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="52" fill="#e57125" text-anchor="middle">Start building.</text>
+
+  <!-- Brand below card -->
+  <text x="510" y="560" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="42" fill="#e57125" text-anchor="end">Jackknife</text>
+  <text x="525" y="560" font-family="Inter, system-ui, sans-serif" font-weight="400" font-size="20" fill="#64748b" text-anchor="start">by Tomitribe</text>
+</svg>

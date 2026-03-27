@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0f172a"/>
+  <rect x="60" y="180" width="500" height="280" fill="#334155"/>
+  <text x="310" y="290" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="400" fill="#e2e8f0">Claude searching</text>
+  <text x="310" y="335" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="400" fill="#e2e8f0">~/.m2 again?</text>
+  <text x="310" y="420" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="700" fill="#e57125">Jackknife</text>
+  <text x="860" y="310" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="50" font-weight="800" fill="#ffffff">Stop approving.</text>
+  <text x="860" y="385" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="50" font-weight="800" fill="#ffffff">Start building.</text>
+</svg>

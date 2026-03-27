@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Jackknife</title><link>https://tomitribe.github.io/jackknife/</link><description>Recent content on Jackknife</description><generator>Hugo</generator><language>en-us</language><atom:link href="https://tomitribe.github.io/jackknife/index.xml" rel="self" type="application/rss+xml"/><item><title>Basic Usage</title><link>https://tomitribe.github.io/jackknife/decompile/usage/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/decompile/usage/</guid><description>&lt;h2 id="prerequisite"&gt;Prerequisite&lt;/h2&gt;
+&lt;p&gt;The jar containing the class must be indexed first:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:index
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;This creates manifests in &lt;code&gt;.jackknife/manifest/&lt;/code&gt; for every dependency jar.
+The decompile goal searches these manifests to locate the class.&lt;/p&gt;
+&lt;h2 id="decompiling-a-class"&gt;Decompiling a class&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:decompile -Dclass&lt;span class="o"&gt;=&lt;/span&gt;com.example.MyClass
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;What happens:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Searches manifests for the fully-qualified class name&lt;/li&gt;
+&lt;li&gt;Locates the jar in your local Maven repository&lt;/li&gt;
+&lt;li&gt;Decompiles the &lt;strong&gt;entire jar&lt;/strong&gt; with Vineflower&lt;/li&gt;
+&lt;li&gt;Prints the requested class source to stdout&lt;/li&gt;
+&lt;li&gt;Writes all decompiled &lt;code&gt;.java&lt;/code&gt; files to &lt;code&gt;.jackknife/source/&lt;/code&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id="why-the-entire-jar"&gt;Why the entire jar?&lt;/h2&gt;
+&lt;p&gt;Decompiling one class or an entire jar takes roughly the same time (~3-5s).
+By decompiling the whole jar up front, every subsequent class read from that
+jar is a direct file access — no Maven invocation, no decompiler startup.&lt;/p&gt;</description></item><item><title>Dependencies</title><link>https://tomitribe.github.io/jackknife/instrument/dependencies/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/instrument/dependencies/</guid><description>&lt;h2 id="supported-scopes"&gt;Supported scopes&lt;/h2&gt;
+&lt;p&gt;All dependency scopes are supported: &lt;strong&gt;compile&lt;/strong&gt;, &lt;strong&gt;runtime&lt;/strong&gt;, &lt;strong&gt;provided&lt;/strong&gt;,
+and &lt;strong&gt;test&lt;/strong&gt;. All scopes are on the test classpath, so instrumented methods
+produce output during &lt;code&gt;mvn test&lt;/code&gt;.&lt;/p&gt;
+&lt;h2 id="command"&gt;Command&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:instrument -Dclass&lt;span class="o"&gt;=&lt;/span&gt;org.tomitribe.util.Join -Dmethod&lt;span class="o"&gt;=&lt;/span&gt;join
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="what-happens-under-the-hood"&gt;What happens under the hood&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;Searches manifests for the class&lt;/li&gt;
+&lt;li&gt;Writes instrumentation config to &lt;code&gt;.jackknife/instrument/&amp;lt;groupId&amp;gt;/&amp;lt;jar&amp;gt;.properties&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Next &lt;code&gt;mvn test&lt;/code&gt; triggers the &lt;code&gt;process&lt;/code&gt; goal in the &lt;strong&gt;initialize&lt;/strong&gt; phase&lt;/li&gt;
+&lt;li&gt;ProcessMojo reads the config and applies the HandlerEnhancer bytecode transformation&lt;/li&gt;
+&lt;li&gt;Patched jar written to &lt;code&gt;.jackknife/modified/&lt;/code&gt; and swapped into the classpath via &lt;code&gt;Artifact.setFile()&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;The original jar in &lt;code&gt;~/.m2&lt;/code&gt; is &lt;strong&gt;never touched&lt;/strong&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id="removal"&gt;Removal&lt;/h2&gt;
+&lt;p&gt;To remove all instrumented jars and reset to the originals:&lt;/p&gt;</description></item><item><title>JSON Format</title><link>https://tomitribe.github.io/jackknife/output/json-format/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/output/json-format/</guid><description>&lt;p&gt;Every instrumented call produces one &lt;code&gt;JACKKNIFE&lt;/code&gt;-prefixed JSON line on stdout.
+Strings are quoted, numbers are bare, values are directly usable in assertions.
+One line per call — grep and parse without multiline handling.&lt;/p&gt;
+&lt;h2 id="registration-events"&gt;Registration events&lt;/h2&gt;
+&lt;p&gt;When the handler auto-discovers instrumentation config at runtime, it prints
+a register event for each method:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;JACKKNIFE {&amp;#34;event&amp;#34;:&amp;#34;register&amp;#34;,&amp;#34;mode&amp;#34;:&amp;#34;debug&amp;#34;,&amp;#34;method&amp;#34;:&amp;#34;org.tomitribe.util.Join.join&amp;#34;}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;This confirms instrumentation is active. If you see register events but no
+call events, the method was never invoked by your test.&lt;/p&gt;</description></item><item><title>Project Dependencies</title><link>https://tomitribe.github.io/jackknife/index-goal/project/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/index-goal/project/</guid><description>&lt;p&gt;The default behavior of &lt;code&gt;mvn jackknife:index&lt;/code&gt; indexes every resolved dependency in your Maven project. No flags, no configuration — just run it.&lt;/p&gt;
+&lt;h2 id="what-gets-indexed"&gt;What Gets Indexed&lt;/h2&gt;
+&lt;p&gt;Jackknife resolves dependencies using &lt;code&gt;ResolutionScope.TEST&lt;/code&gt;, which means all scopes are visible: compile, runtime, provided, and test. If Maven can see it, Jackknife will manifest it.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:index
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;pre tabindex="0"&gt;&lt;code&gt;[INFO] Manifested 47 jars, skipped 0 (up to date or non-jar)
+[INFO] Generated .jackknife/USAGE.md
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="where-manifests-go"&gt;Where Manifests Go&lt;/h2&gt;
+&lt;p&gt;Manifests are written to &lt;code&gt;.jackknife/manifest/&lt;/code&gt; at the reactor root (the directory where you ran &lt;code&gt;mvn&lt;/code&gt;). In a multi-module project, every module&amp;rsquo;s dependencies are indexed into the same shared manifest directory.&lt;/p&gt;</description></item><item><title>Caching</title><link>https://tomitribe.github.io/jackknife/decompile/caching/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/decompile/caching/</guid><description>&lt;h2 id="how-caching-works"&gt;How caching works&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;First request&lt;/strong&gt; for any class in a jar decompiles the entire jar (~3-5s)&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;All subsequent reads&lt;/strong&gt; are direct file access — no Maven invocation&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Cache location:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;.jackknife/source/&amp;lt;groupId&amp;gt;/&amp;lt;artifact&amp;gt;-&amp;lt;version&amp;gt;/
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="skip-maven-entirely"&gt;Skip Maven entirely&lt;/h2&gt;
+&lt;p&gt;Before invoking &lt;code&gt;mvn jackknife:decompile&lt;/code&gt;, check whether the source is
+already cached:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;Glob .jackknife/source/**/&amp;lt;ClassName&amp;gt;.java
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;If found, read it directly. No need to start Maven at all.&lt;/p&gt;
+&lt;h2 id="clearing-the-cache"&gt;Clearing the cache&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:clean -Dpath&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nb"&gt;source&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;This removes all decompiled source files. The next decompile request will
+re-decompile from scratch.&lt;/p&gt;</description></item><item><title>Extracting Values</title><link>https://tomitribe.github.io/jackknife/output/extracting-values/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/output/extracting-values/</guid><description>&lt;p&gt;The primary use case: a test fails, you instrument the method, the JSON shows
+you the actual value, you update the assertion. No debugger, no println, no
+guessing.&lt;/p&gt;
+&lt;h2 id="copying-values-into-assertions"&gt;Copying values into assertions&lt;/h2&gt;
+&lt;p&gt;String values — already quoted in the output, paste directly:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// From output: &amp;#34;return&amp;#34;:&amp;#34;a and b and c&amp;#34;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;assertEquals&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;a and b and c&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Numeric values — bare in the output:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// From output: &amp;#34;return&amp;#34;:42&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;assertEquals&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;42&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Null:&lt;/p&gt;</description></item><item><title>Project Code</title><link>https://tomitribe.github.io/jackknife/instrument/project-code/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/instrument/project-code/</guid><description>&lt;h2 id="how-it-works"&gt;How it works&lt;/h2&gt;
+&lt;p&gt;Same command — if the class is not found in dependency manifests, Jackknife
+checks your project source:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:instrument -Dclass&lt;span class="o"&gt;=&lt;/span&gt;com.example.MyService -Dmethod&lt;span class="o"&gt;=&lt;/span&gt;process
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="configuration"&gt;Configuration&lt;/h2&gt;
+&lt;p&gt;Instrumentation config is written to:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;.jackknife/instrument/_project/project.properties
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="build-integration"&gt;Build integration&lt;/h2&gt;
+&lt;p&gt;The &lt;code&gt;enhance&lt;/code&gt; goal is bound to the &lt;strong&gt;process-test-classes&lt;/strong&gt; phase. It modifies
+bytecode in &lt;code&gt;target/classes/&lt;/code&gt; and &lt;code&gt;target/test-classes/&lt;/code&gt; in place.&lt;/p&gt;
+&lt;p&gt;Tests run against the enhanced bytecode automatically — no extra steps.&lt;/p&gt;
+&lt;h2 id="supported-locations"&gt;Supported locations&lt;/h2&gt;
+&lt;p&gt;Both &lt;code&gt;src/main/java&lt;/code&gt; and &lt;code&gt;src/test/java&lt;/code&gt; classes are supported. Whether you
+want to instrument a service class or a test helper, the same command works.&lt;/p&gt;</description></item><item><title>Repository Search</title><link>https://tomitribe.github.io/jackknife/index-goal/repository/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/index-goal/repository/</guid><description>&lt;h2 id="the-problem"&gt;The Problem&lt;/h2&gt;
+&lt;p&gt;Finding a class in &lt;code&gt;~/.m2/repository&lt;/code&gt; is painful. Developers end up chaining &lt;code&gt;find&lt;/code&gt;, &lt;code&gt;jar tf&lt;/code&gt;, and &lt;code&gt;javap&lt;/code&gt; — each requiring its own permission prompt in Claude, each producing output that needs manual parsing. Even when you know the fully qualified class name, locating the right jar version in a repository with thousands of artifacts is tedious.&lt;/p&gt;
+&lt;h2 id="the-solution"&gt;The Solution&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:index -Dclass&lt;span class="o"&gt;=&lt;/span&gt;com.fasterxml.jackson.databind.ObjectMapper
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;One command. Jackknife finds the jar, indexes it, and tells you exactly where the class lives.&lt;/p&gt;</description></item><item><title>Broad Search</title><link>https://tomitribe.github.io/jackknife/index-goal/broad-search/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/index-goal/broad-search/</guid><description>&lt;h2 id="when-to-use"&gt;When to Use&lt;/h2&gt;
+&lt;p&gt;The &lt;code&gt;-Dclass=&lt;/code&gt; search finds one specific class. Sometimes you want to explore an entire library family — index all Jackson jars, all Commons libraries, or everything from a particular vendor. Broad search does that.&lt;/p&gt;
+&lt;h2 id="usage"&gt;Usage&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:index -Dscope&lt;span class="o"&gt;=&lt;/span&gt;repo -Dfilter&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;&amp;#34;**jackson**&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;pre tabindex="0"&gt;&lt;code&gt;[INFO] Searching /Users/you/.m2/repository with filter: **jackson**
+[INFO] com.fasterxml.jackson.core:jackson-core:2.15.3
+[INFO] com.fasterxml.jackson.core:jackson-databind:2.15.3
+[INFO] com.fasterxml.jackson.core:jackson-annotations:2.15.3
+[INFO] com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.3
+[INFO] com.fasterxml.jackson.module:jackson-module-parameter-names:2.15.3
+[INFO] Indexed 5 jars from repo
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;Both &lt;code&gt;-Dscope=repo&lt;/code&gt; and &lt;code&gt;-Dfilter=&lt;/code&gt; are required. The scope tells Jackknife to search the entire local repository instead of project dependencies, and the filter narrows which jars to index.&lt;/p&gt;</description></item><item><title>Capture Files</title><link>https://tomitribe.github.io/jackknife/output/capture-files/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/output/capture-files/</guid><description>&lt;p&gt;When the full JSON line exceeds the threshold (default 500 characters) or
+contains newlines, the complete event is written to a capture file. The
+console gets a summary line instead.&lt;/p&gt;
+&lt;h2 id="console-summary"&gt;Console summary&lt;/h2&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;JACKKNIFE {&amp;#34;event&amp;#34;:&amp;#34;call&amp;#34;,&amp;#34;time&amp;#34;:&amp;#34;2.3ms&amp;#34;,&amp;#34;class&amp;#34;:&amp;#34;Join&amp;#34;,&amp;#34;method&amp;#34;:&amp;#34;join&amp;#34;,&amp;#34;status&amp;#34;:&amp;#34;returned&amp;#34;,&amp;#34;file&amp;#34;:&amp;#34;target/jackknife/captures/capture-0012.txt&amp;#34;}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;The summary line includes enough to triage without opening the file:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;time&lt;/code&gt; — how long the call took&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;class&lt;/code&gt; and &lt;code&gt;method&lt;/code&gt; — what was called&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;status&lt;/code&gt; — &lt;code&gt;&amp;quot;returned&amp;quot;&lt;/code&gt; or &lt;code&gt;&amp;quot;thrown&amp;quot;&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;exception&lt;/code&gt; — exception type (only when &lt;code&gt;status&lt;/code&gt; is &lt;code&gt;&amp;quot;thrown&amp;quot;&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;file&lt;/code&gt; — path to the capture file&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Scan timing and status across all calls. Open only the ones that matter.&lt;/p&gt;</description></item><item><title>Matching</title><link>https://tomitribe.github.io/jackknife/instrument/matching/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/instrument/matching/</guid><description>&lt;h2 id="granularity"&gt;Granularity&lt;/h2&gt;
+&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;Input&lt;/th&gt;
+ &lt;th&gt;What gets instrumented&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;&lt;code&gt;-Dclass=Foo -Dmethod=&amp;quot;bar(String,int)&amp;quot;&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;That one method&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;&lt;code&gt;-Dclass=Foo -Dmethod=bar&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;All overloads of bar&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;&lt;code&gt;-Dclass=Foo&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;All methods of Foo&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;&lt;code&gt;-Dclass=&amp;quot;org.junit.**&amp;quot; -Dmethod=assertEquals&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;assertEquals in all junit classes&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;&lt;code&gt;-Dclass=&amp;quot;**Handler&amp;quot;&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;All methods of any class ending in Handler&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="glob-patterns"&gt;Glob patterns&lt;/h2&gt;
+&lt;p&gt;The &lt;code&gt;-Dclass&lt;/code&gt; parameter supports glob patterns:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;*&lt;/code&gt; matches one package level (e.g., &lt;code&gt;org.example.*&lt;/code&gt; matches classes directly in &lt;code&gt;org.example&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;**&lt;/code&gt; matches any depth (e.g., &lt;code&gt;org.example.**&lt;/code&gt; matches classes in &lt;code&gt;org.example&lt;/code&gt; and all sub-packages)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="optional-method"&gt;Optional method&lt;/h2&gt;
+&lt;p&gt;The &lt;code&gt;-Dmethod&lt;/code&gt; parameter is optional. Omit it to instrument all methods of
+the matched class(es).&lt;/p&gt;</description></item><item><title>Source Structure</title><link>https://tomitribe.github.io/jackknife/decompile/source-structure/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/decompile/source-structure/</guid><description>&lt;h2 id="directory-layout"&gt;Directory layout&lt;/h2&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;.jackknife/source/
+└── com.fasterxml.jackson.core/
+ └── jackson-databind-2.20.1/
+ └── com/
+ └── fasterxml/
+ └── jackson/
+ └── databind/
+ ├── ObjectMapper.java
+ ├── JsonNode.java
+ └── ...
+&lt;/code&gt;&lt;/pre&gt;&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;GroupId&lt;/strong&gt; as a flat directory name (dots preserved, not expanded to subdirectories)&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Artifact-version&lt;/strong&gt; as a subdirectory&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Package structure&lt;/strong&gt; preserved underneath, matching the original source layout&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="inner-classes"&gt;Inner classes&lt;/h2&gt;
+&lt;p&gt;Inner classes are decompiled into the same &lt;code&gt;.java&lt;/code&gt; file as the outer class.
+You won&amp;rsquo;t see separate files for &lt;code&gt;Foo$Bar.class&lt;/code&gt; — look in &lt;code&gt;Foo.java&lt;/code&gt;.&lt;/p&gt;</description></item><item><title>Manifest Format</title><link>https://tomitribe.github.io/jackknife/index-goal/manifest-format/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/index-goal/manifest-format/</guid><description>&lt;h2 id="file-location"&gt;File Location&lt;/h2&gt;
+&lt;p&gt;Manifests live in &lt;code&gt;.jackknife/manifest/&lt;/code&gt; with one file per indexed jar:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;.jackknife/manifest/&amp;lt;groupId&amp;gt;/&amp;lt;artifact&amp;gt;-&amp;lt;version&amp;gt;.jar.manifest
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;The groupId is a flat directory name with dots — not nested directories. This keeps the structure shallow and predictable:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;.jackknife/manifest/
+ com.fasterxml.jackson.core/
+ jackson-core-2.15.3.jar.manifest
+ jackson-databind-2.15.3.jar.manifest
+ jackson-annotations-2.15.3.jar.manifest
+ org.tomitribe/
+ tomitribe-util-1.3.23.jar.manifest
+ jakarta.servlet/
+ jakarta.servlet-api-6.0.0.jar.manifest
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="format"&gt;Format&lt;/h2&gt;
+&lt;p&gt;A manifest file is plain text. Class names are listed one per line in dotted format, followed by an optional resources section.&lt;/p&gt;
+&lt;h3 id="example"&gt;Example&lt;/h3&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;com.fasterxml.jackson.core.JsonFactory
+com.fasterxml.jackson.core.JsonFactory$Feature
+com.fasterxml.jackson.core.JsonGenerator
+com.fasterxml.jackson.core.JsonGenerator$Feature
+com.fasterxml.jackson.core.JsonParser
+com.fasterxml.jackson.core.JsonParser$Feature
+com.fasterxml.jackson.core.JsonParser$NumberType
+com.fasterxml.jackson.core.JsonToken
+com.fasterxml.jackson.core.ObjectCodec
+com.fasterxml.jackson.core.Version
+com.fasterxml.jackson.core.io.IOContext
+com.fasterxml.jackson.core.json.JsonReadContext
+com.fasterxml.jackson.core.json.JsonWriteContext
+com.fasterxml.jackson.core.type.TypeReference
+com.fasterxml.jackson.core.util.DefaultPrettyPrinter
+# resources
+META-INF/MANIFEST.MF
+META-INF/LICENSE
+META-INF/NOTICE
+META-INF/services/com.fasterxml.jackson.core.JsonFactory
+META-INF/versions/9/module-info.class
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id="whats-included"&gt;What&amp;rsquo;s Included&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;Every &lt;code&gt;.class&lt;/code&gt; file in the jar, converted to dotted class name format&lt;/li&gt;
+&lt;li&gt;Inner classes appear with their &lt;code&gt;$&lt;/code&gt; separator: &lt;code&gt;JsonFactory$Feature&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Resources are listed after a &lt;code&gt;# resources&lt;/code&gt; header line&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="whats-excluded"&gt;What&amp;rsquo;s Excluded&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;module-info.class&lt;/code&gt; — skipped, not a real class&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;package-info.class&lt;/code&gt; — skipped, contains only annotations&lt;/li&gt;
+&lt;li&gt;Directory entries — skipped, only files are listed&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="whats-not-in-the-manifest"&gt;What&amp;rsquo;s NOT in the Manifest&lt;/h3&gt;
+&lt;p&gt;No method signatures, no field info, no bytecode analysis. The manifest is purely a listing of what&amp;rsquo;s in the jar. This is intentional — it&amp;rsquo;s why indexing is sub-second. Method signatures and implementation details come from the decompile step, which produces full &lt;code&gt;.java&lt;/code&gt; source files on demand.&lt;/p&gt;</description></item><item><title>Modes</title><link>https://tomitribe.github.io/jackknife/instrument/modes/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/instrument/modes/</guid><description>&lt;h2 id="available-modes"&gt;Available modes&lt;/h2&gt;
+&lt;h3 id="debug-default"&gt;debug (default)&lt;/h3&gt;
+&lt;p&gt;Args, return values, exceptions, and timing — all in one JSON line:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;JACKKNIFE {&amp;#34;event&amp;#34;:&amp;#34;call&amp;#34;,&amp;#34;time&amp;#34;:&amp;#34;12.3us&amp;#34;,&amp;#34;class&amp;#34;:&amp;#34;Foo&amp;#34;,&amp;#34;method&amp;#34;:&amp;#34;bar&amp;#34;,&amp;#34;args&amp;#34;:[&amp;#34;hello&amp;#34;],&amp;#34;return&amp;#34;:&amp;#34;world&amp;#34;}
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id="timing"&gt;timing&lt;/h3&gt;
+&lt;p&gt;Elapsed time and status only. No args or return values:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;JACKKNIFE {&amp;#34;event&amp;#34;:&amp;#34;call&amp;#34;,&amp;#34;time&amp;#34;:&amp;#34;12.3us&amp;#34;,&amp;#34;class&amp;#34;:&amp;#34;Foo&amp;#34;,&amp;#34;method&amp;#34;:&amp;#34;bar&amp;#34;,&amp;#34;status&amp;#34;:&amp;#34;returned&amp;#34;}
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="selecting-a-mode"&gt;Selecting a mode&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:instrument -Dclass&lt;span class="o"&gt;=&lt;/span&gt;com.example.Foo -Dmethod&lt;span class="o"&gt;=&lt;/span&gt;bar -Dmode&lt;span class="o"&gt;=&lt;/span&gt;timing
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="when-to-use-timing"&gt;When to use timing&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Performance profiling&lt;/strong&gt; — find slow methods without the noise of arg/return data&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Finding bottlenecks&lt;/strong&gt; — narrow down which method in a call chain is expensive&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Lightweight observation&lt;/strong&gt; — when you know what the method does and just need to know how long it takes&lt;/li&gt;
+&lt;/ul&gt;</description></item></channel></rss>

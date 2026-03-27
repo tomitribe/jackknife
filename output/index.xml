@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Output on Jackknife</title><link>https://tomitribe.github.io/jackknife/output/</link><description>Recent content in Output on Jackknife</description><generator>Hugo</generator><language>en-us</language><atom:link href="https://tomitribe.github.io/jackknife/output/index.xml" rel="self" type="application/rss+xml"/><item><title>JSON Format</title><link>https://tomitribe.github.io/jackknife/output/json-format/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/output/json-format/</guid><description>&lt;p&gt;Every instrumented call produces one &lt;code&gt;JACKKNIFE&lt;/code&gt;-prefixed JSON line on stdout.
+Strings are quoted, numbers are bare, values are directly usable in assertions.
+One line per call — grep and parse without multiline handling.&lt;/p&gt;
+&lt;h2 id="registration-events"&gt;Registration events&lt;/h2&gt;
+&lt;p&gt;When the handler auto-discovers instrumentation config at runtime, it prints
+a register event for each method:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;JACKKNIFE {&amp;#34;event&amp;#34;:&amp;#34;register&amp;#34;,&amp;#34;mode&amp;#34;:&amp;#34;debug&amp;#34;,&amp;#34;method&amp;#34;:&amp;#34;org.tomitribe.util.Join.join&amp;#34;}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;This confirms instrumentation is active. If you see register events but no
+call events, the method was never invoked by your test.&lt;/p&gt;</description></item><item><title>Extracting Values</title><link>https://tomitribe.github.io/jackknife/output/extracting-values/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/output/extracting-values/</guid><description>&lt;p&gt;The primary use case: a test fails, you instrument the method, the JSON shows
+you the actual value, you update the assertion. No debugger, no println, no
+guessing.&lt;/p&gt;
+&lt;h2 id="copying-values-into-assertions"&gt;Copying values into assertions&lt;/h2&gt;
+&lt;p&gt;String values — already quoted in the output, paste directly:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// From output: &amp;#34;return&amp;#34;:&amp;#34;a and b and c&amp;#34;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;assertEquals&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;a and b and c&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Numeric values — bare in the output:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// From output: &amp;#34;return&amp;#34;:42&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;assertEquals&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;42&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Null:&lt;/p&gt;</description></item><item><title>Capture Files</title><link>https://tomitribe.github.io/jackknife/output/capture-files/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/output/capture-files/</guid><description>&lt;p&gt;When the full JSON line exceeds the threshold (default 500 characters) or
+contains newlines, the complete event is written to a capture file. The
+console gets a summary line instead.&lt;/p&gt;
+&lt;h2 id="console-summary"&gt;Console summary&lt;/h2&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;JACKKNIFE {&amp;#34;event&amp;#34;:&amp;#34;call&amp;#34;,&amp;#34;time&amp;#34;:&amp;#34;2.3ms&amp;#34;,&amp;#34;class&amp;#34;:&amp;#34;Join&amp;#34;,&amp;#34;method&amp;#34;:&amp;#34;join&amp;#34;,&amp;#34;status&amp;#34;:&amp;#34;returned&amp;#34;,&amp;#34;file&amp;#34;:&amp;#34;target/jackknife/captures/capture-0012.txt&amp;#34;}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;The summary line includes enough to triage without opening the file:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;time&lt;/code&gt; — how long the call took&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;class&lt;/code&gt; and &lt;code&gt;method&lt;/code&gt; — what was called&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;status&lt;/code&gt; — &lt;code&gt;&amp;quot;returned&amp;quot;&lt;/code&gt; or &lt;code&gt;&amp;quot;thrown&amp;quot;&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;exception&lt;/code&gt; — exception type (only when &lt;code&gt;status&lt;/code&gt; is &lt;code&gt;&amp;quot;thrown&amp;quot;&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;file&lt;/code&gt; — path to the capture file&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Scan timing and status across all calls. Open only the ones that matter.&lt;/p&gt;</description></item></channel></rss>

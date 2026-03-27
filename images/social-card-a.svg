@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- OPTION A: Stacked centered — all text centered, problem huge at top -->
+  <rect width="1200" height="630" fill="#0f172a"/>
+  <rect x="0" y="0" width="1200" height="4" fill="#e57125"/>
+
+  <!-- Problem — huge, centered -->
+  <text x="600" y="190" font-family="Inter, system-ui, sans-serif" font-weight="300" font-size="72" fill="#94a3b8" text-anchor="middle">Claude searching ~/.m2 again?</text>
+
+  <!-- Solution — bold, centered -->
+  <text x="600" y="340" font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="56" fill="#ffffff" text-anchor="middle">Stop approving. Start building.</text>
+
+  <!-- Brand — centered at bottom -->
+  <text x="530" y="510" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="52" fill="#e57125" text-anchor="end">Jackknife</text>
+  <text x="545" y="510" font-family="Inter, system-ui, sans-serif" font-weight="400" font-size="22" fill="#64748b" text-anchor="start">by Tomitribe</text>
+</svg>

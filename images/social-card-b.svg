@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- OPTION B: Left-heavy split — brand + problem left, orange block right -->
+  <rect width="1200" height="630" fill="#0f172a"/>
+
+  <!-- Right orange accent panel -->
+  <rect x="900" y="0" width="300" height="630" fill="#e57125"/>
+
+  <!-- Jackknife vertical on right panel -->
+  <text x="1050" y="400" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="48" fill="#ffffff" text-anchor="middle" transform="rotate(-90, 1050, 400)">JACKKNIFE</text>
+  <text x="1050" y="560" font-family="Inter, system-ui, sans-serif" font-weight="400" font-size="18" fill="rgba(255,255,255,0.7)" text-anchor="middle">by Tomitribe</text>
+
+  <!-- Problem — large left -->
+  <text x="80" y="200" font-family="Inter, system-ui, sans-serif" font-weight="300" font-size="64" fill="#94a3b8">Claude searching</text>
+  <text x="80" y="280" font-family="Inter, system-ui, sans-serif" font-weight="300" font-size="64" fill="#94a3b8">~/.m2 again?</text>
+
+  <!-- Solution — bold left -->
+  <text x="80" y="430" font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="42" fill="#ffffff">Stop approving.</text>
+  <text x="80" y="490" font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="42" fill="#ffffff">Start building.</text>
+</svg>

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Instrument on Jackknife</title><link>https://tomitribe.github.io/jackknife/instrument/</link><description>Recent content in Instrument on Jackknife</description><generator>Hugo</generator><language>en-us</language><atom:link href="https://tomitribe.github.io/jackknife/instrument/index.xml" rel="self" type="application/rss+xml"/><item><title>Dependencies</title><link>https://tomitribe.github.io/jackknife/instrument/dependencies/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/instrument/dependencies/</guid><description>&lt;h2 id="supported-scopes"&gt;Supported scopes&lt;/h2&gt;
+&lt;p&gt;All dependency scopes are supported: &lt;strong&gt;compile&lt;/strong&gt;, &lt;strong&gt;runtime&lt;/strong&gt;, &lt;strong&gt;provided&lt;/strong&gt;,
+and &lt;strong&gt;test&lt;/strong&gt;. All scopes are on the test classpath, so instrumented methods
+produce output during &lt;code&gt;mvn test&lt;/code&gt;.&lt;/p&gt;
+&lt;h2 id="command"&gt;Command&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:instrument -Dclass&lt;span class="o"&gt;=&lt;/span&gt;org.tomitribe.util.Join -Dmethod&lt;span class="o"&gt;=&lt;/span&gt;join
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="what-happens-under-the-hood"&gt;What happens under the hood&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;Searches manifests for the class&lt;/li&gt;
+&lt;li&gt;Writes instrumentation config to &lt;code&gt;.jackknife/instrument/&amp;lt;groupId&amp;gt;/&amp;lt;jar&amp;gt;.properties&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Next &lt;code&gt;mvn test&lt;/code&gt; triggers the &lt;code&gt;process&lt;/code&gt; goal in the &lt;strong&gt;initialize&lt;/strong&gt; phase&lt;/li&gt;
+&lt;li&gt;ProcessMojo reads the config and applies the HandlerEnhancer bytecode transformation&lt;/li&gt;
+&lt;li&gt;Patched jar written to &lt;code&gt;.jackknife/modified/&lt;/code&gt; and swapped into the classpath via &lt;code&gt;Artifact.setFile()&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;The original jar in &lt;code&gt;~/.m2&lt;/code&gt; is &lt;strong&gt;never touched&lt;/strong&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id="removal"&gt;Removal&lt;/h2&gt;
+&lt;p&gt;To remove all instrumented jars and reset to the originals:&lt;/p&gt;</description></item><item><title>Project Code</title><link>https://tomitribe.github.io/jackknife/instrument/project-code/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/instrument/project-code/</guid><description>&lt;h2 id="how-it-works"&gt;How it works&lt;/h2&gt;
+&lt;p&gt;Same command — if the class is not found in dependency manifests, Jackknife
+checks your project source:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:instrument -Dclass&lt;span class="o"&gt;=&lt;/span&gt;com.example.MyService -Dmethod&lt;span class="o"&gt;=&lt;/span&gt;process
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="configuration"&gt;Configuration&lt;/h2&gt;
+&lt;p&gt;Instrumentation config is written to:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;.jackknife/instrument/_project/project.properties
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="build-integration"&gt;Build integration&lt;/h2&gt;
+&lt;p&gt;The &lt;code&gt;enhance&lt;/code&gt; goal is bound to the &lt;strong&gt;process-test-classes&lt;/strong&gt; phase. It modifies
+bytecode in &lt;code&gt;target/classes/&lt;/code&gt; and &lt;code&gt;target/test-classes/&lt;/code&gt; in place.&lt;/p&gt;
+&lt;p&gt;Tests run against the enhanced bytecode automatically — no extra steps.&lt;/p&gt;
+&lt;h2 id="supported-locations"&gt;Supported locations&lt;/h2&gt;
+&lt;p&gt;Both &lt;code&gt;src/main/java&lt;/code&gt; and &lt;code&gt;src/test/java&lt;/code&gt; classes are supported. Whether you
+want to instrument a service class or a test helper, the same command works.&lt;/p&gt;</description></item><item><title>Matching</title><link>https://tomitribe.github.io/jackknife/instrument/matching/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/instrument/matching/</guid><description>&lt;h2 id="granularity"&gt;Granularity&lt;/h2&gt;
+&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;Input&lt;/th&gt;
+ &lt;th&gt;What gets instrumented&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;&lt;code&gt;-Dclass=Foo -Dmethod=&amp;quot;bar(String,int)&amp;quot;&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;That one method&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;&lt;code&gt;-Dclass=Foo -Dmethod=bar&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;All overloads of bar&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;&lt;code&gt;-Dclass=Foo&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;All methods of Foo&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;&lt;code&gt;-Dclass=&amp;quot;org.junit.**&amp;quot; -Dmethod=assertEquals&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;assertEquals in all junit classes&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;&lt;code&gt;-Dclass=&amp;quot;**Handler&amp;quot;&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;All methods of any class ending in Handler&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="glob-patterns"&gt;Glob patterns&lt;/h2&gt;
+&lt;p&gt;The &lt;code&gt;-Dclass&lt;/code&gt; parameter supports glob patterns:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;*&lt;/code&gt; matches one package level (e.g., &lt;code&gt;org.example.*&lt;/code&gt; matches classes directly in &lt;code&gt;org.example&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;**&lt;/code&gt; matches any depth (e.g., &lt;code&gt;org.example.**&lt;/code&gt; matches classes in &lt;code&gt;org.example&lt;/code&gt; and all sub-packages)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="optional-method"&gt;Optional method&lt;/h2&gt;
+&lt;p&gt;The &lt;code&gt;-Dmethod&lt;/code&gt; parameter is optional. Omit it to instrument all methods of
+the matched class(es).&lt;/p&gt;</description></item><item><title>Modes</title><link>https://tomitribe.github.io/jackknife/instrument/modes/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/instrument/modes/</guid><description>&lt;h2 id="available-modes"&gt;Available modes&lt;/h2&gt;
+&lt;h3 id="debug-default"&gt;debug (default)&lt;/h3&gt;
+&lt;p&gt;Args, return values, exceptions, and timing — all in one JSON line:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;JACKKNIFE {&amp;#34;event&amp;#34;:&amp;#34;call&amp;#34;,&amp;#34;time&amp;#34;:&amp;#34;12.3us&amp;#34;,&amp;#34;class&amp;#34;:&amp;#34;Foo&amp;#34;,&amp;#34;method&amp;#34;:&amp;#34;bar&amp;#34;,&amp;#34;args&amp;#34;:[&amp;#34;hello&amp;#34;],&amp;#34;return&amp;#34;:&amp;#34;world&amp;#34;}
+&lt;/code&gt;&lt;/pre&gt;&lt;h3 id="timing"&gt;timing&lt;/h3&gt;
+&lt;p&gt;Elapsed time and status only. No args or return values:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;JACKKNIFE {&amp;#34;event&amp;#34;:&amp;#34;call&amp;#34;,&amp;#34;time&amp;#34;:&amp;#34;12.3us&amp;#34;,&amp;#34;class&amp;#34;:&amp;#34;Foo&amp;#34;,&amp;#34;method&amp;#34;:&amp;#34;bar&amp;#34;,&amp;#34;status&amp;#34;:&amp;#34;returned&amp;#34;}
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="selecting-a-mode"&gt;Selecting a mode&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:instrument -Dclass&lt;span class="o"&gt;=&lt;/span&gt;com.example.Foo -Dmethod&lt;span class="o"&gt;=&lt;/span&gt;bar -Dmode&lt;span class="o"&gt;=&lt;/span&gt;timing
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="when-to-use-timing"&gt;When to use timing&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Performance profiling&lt;/strong&gt; — find slow methods without the noise of arg/return data&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Finding bottlenecks&lt;/strong&gt; — narrow down which method in a call chain is expensive&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Lightweight observation&lt;/strong&gt; — when you know what the method does and just need to know how long it takes&lt;/li&gt;
+&lt;/ul&gt;</description></item></channel></rss>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- OPTION D: Diagonal split — navy top-left with problem, orange bottom-right with solution -->
+  <rect width="1200" height="630" fill="#0f172a"/>
+  <polygon points="0,430 1200,280 1200,630 0,630" fill="#e57125"/>
+
+  <!-- Problem — top half -->
+  <text x="80" y="150" font-family="Inter, system-ui, sans-serif" font-weight="300" font-size="68" fill="#94a3b8">Claude searching</text>
+  <text x="80" y="240" font-family="Inter, system-ui, sans-serif" font-weight="300" font-size="68" fill="#e2e8f0">~/.m2 again?</text>
+
+  <!-- Solution — on orange -->
+  <text x="80" y="500" font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="48" fill="#ffffff">Stop approving. Start building.</text>
+
+  <!-- Brand — bottom right on orange -->
+  <text x="1120" y="590" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="36" fill="rgba(255,255,255,0.9)" text-anchor="end">Jackknife</text>
+  <text x="1120" y="618" font-family="Inter, system-ui, sans-serif" font-weight="400" font-size="16" fill="rgba(255,255,255,0.6)" text-anchor="end">by Tomitribe</text>
+</svg>

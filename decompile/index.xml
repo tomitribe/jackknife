@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Decompile on Jackknife</title><link>https://tomitribe.github.io/jackknife/decompile/</link><description>Recent content in Decompile on Jackknife</description><generator>Hugo</generator><language>en-us</language><atom:link href="https://tomitribe.github.io/jackknife/decompile/index.xml" rel="self" type="application/rss+xml"/><item><title>Basic Usage</title><link>https://tomitribe.github.io/jackknife/decompile/usage/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/decompile/usage/</guid><description>&lt;h2 id="prerequisite"&gt;Prerequisite&lt;/h2&gt;
+&lt;p&gt;The jar containing the class must be indexed first:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:index
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;This creates manifests in &lt;code&gt;.jackknife/manifest/&lt;/code&gt; for every dependency jar.
+The decompile goal searches these manifests to locate the class.&lt;/p&gt;
+&lt;h2 id="decompiling-a-class"&gt;Decompiling a class&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:decompile -Dclass&lt;span class="o"&gt;=&lt;/span&gt;com.example.MyClass
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;What happens:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Searches manifests for the fully-qualified class name&lt;/li&gt;
+&lt;li&gt;Locates the jar in your local Maven repository&lt;/li&gt;
+&lt;li&gt;Decompiles the &lt;strong&gt;entire jar&lt;/strong&gt; with Vineflower&lt;/li&gt;
+&lt;li&gt;Prints the requested class source to stdout&lt;/li&gt;
+&lt;li&gt;Writes all decompiled &lt;code&gt;.java&lt;/code&gt; files to &lt;code&gt;.jackknife/source/&lt;/code&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id="why-the-entire-jar"&gt;Why the entire jar?&lt;/h2&gt;
+&lt;p&gt;Decompiling one class or an entire jar takes roughly the same time (~3-5s).
+By decompiling the whole jar up front, every subsequent class read from that
+jar is a direct file access — no Maven invocation, no decompiler startup.&lt;/p&gt;</description></item><item><title>Caching</title><link>https://tomitribe.github.io/jackknife/decompile/caching/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/decompile/caching/</guid><description>&lt;h2 id="how-caching-works"&gt;How caching works&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;First request&lt;/strong&gt; for any class in a jar decompiles the entire jar (~3-5s)&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;All subsequent reads&lt;/strong&gt; are direct file access — no Maven invocation&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Cache location:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;.jackknife/source/&amp;lt;groupId&amp;gt;/&amp;lt;artifact&amp;gt;-&amp;lt;version&amp;gt;/
+&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="skip-maven-entirely"&gt;Skip Maven entirely&lt;/h2&gt;
+&lt;p&gt;Before invoking &lt;code&gt;mvn jackknife:decompile&lt;/code&gt;, check whether the source is
+already cached:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;Glob .jackknife/source/**/&amp;lt;ClassName&amp;gt;.java
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;If found, read it directly. No need to start Maven at all.&lt;/p&gt;
+&lt;h2 id="clearing-the-cache"&gt;Clearing the cache&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;mvn jackknife:clean -Dpath&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nb"&gt;source&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;This removes all decompiled source files. The next decompile request will
+re-decompile from scratch.&lt;/p&gt;</description></item><item><title>Source Structure</title><link>https://tomitribe.github.io/jackknife/decompile/source-structure/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://tomitribe.github.io/jackknife/decompile/source-structure/</guid><description>&lt;h2 id="directory-layout"&gt;Directory layout&lt;/h2&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;.jackknife/source/
+└── com.fasterxml.jackson.core/
+ └── jackson-databind-2.20.1/
+ └── com/
+ └── fasterxml/
+ └── jackson/
+ └── databind/
+ ├── ObjectMapper.java
+ ├── JsonNode.java
+ └── ...
+&lt;/code&gt;&lt;/pre&gt;&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;GroupId&lt;/strong&gt; as a flat directory name (dots preserved, not expanded to subdirectories)&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Artifact-version&lt;/strong&gt; as a subdirectory&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Package structure&lt;/strong&gt; preserved underneath, matching the original source layout&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="inner-classes"&gt;Inner classes&lt;/h2&gt;
+&lt;p&gt;Inner classes are decompiled into the same &lt;code&gt;.java&lt;/code&gt; file as the outer class.
+You won&amp;rsquo;t see separate files for &lt;code&gt;Foo$Bar.class&lt;/code&gt; — look in &lt;code&gt;Foo.java&lt;/code&gt;.&lt;/p&gt;</description></item></channel></rss>
